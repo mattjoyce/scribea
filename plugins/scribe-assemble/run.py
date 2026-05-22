@@ -12,8 +12,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _scribe_common import (  # noqa: E402
-    baggage, err, ingress_callback, ingress_get, ok, read_request,
-    with_timer, write_response,
+    Stopwatch, baggage, err, ingress_callback, ingress_get, ok, read_request,
+    write_response,
 )
 
 WORKER = "scribe-assemble"
@@ -87,12 +87,13 @@ def main() -> None:
         write_response(err("session_id missing", retry=False))
         return
 
-    elapsed = with_timer()
+    sw = Stopwatch()
     try:
         session_view = ingress_get(ingress_url, f"/sessions/{session_id}")
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress GET failed: {e}", retry=True))
         return
+    sw.mark("ingress_get_ms")
 
     session = session_view.get("session") or {}
     clips = sorted(session_view.get("clips") or [], key=lambda c: c.get("seq", 0))
@@ -100,19 +101,21 @@ def main() -> None:
         template_id = session.get("template_id")
 
     assembled_context, gaps = compose(session, clips, template_id or "unknown")
-    meta = baggage(
-        WORKER, VERSION, latency_ms=elapsed(),
-        extra={"clip_count": len(clips), "gap_count": len(gaps), "template_id": template_id},
-    )
+    sw.mark("compose_ms")
     try:
         ingress_callback(ingress_url, f"/internal/sessions/{session_id}/assembled", {
             "assembled_context": assembled_context,
             "gaps": gaps,
-            "meta": meta,
+            "meta": baggage(
+                WORKER, VERSION, latency_ms=sw.total_ms(), timings=sw.phases,
+                extra={"clip_count": len(clips), "gap_count": len(gaps),
+                       "template_id": template_id},
+            ),
         })
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress callback failed: {e}", retry=True))
         return
+    sw.mark("ingress_callback_ms")
 
     write_response(ok(
         f"assembled {len(clips)} clips ({len(gaps)} gaps)",
@@ -125,7 +128,10 @@ def main() -> None:
                 "gaps": gaps,
             },
         }],
-        logs=[{"level": "info", "message": f"assembled {session_id}"}],
+        logs=[
+            {"level": "info", "message": f"assembled {session_id}"},
+            {"level": "debug", "message": f"timings={sw.phases} total={sw.total_ms()}ms"},
+        ],
     ))
 
 

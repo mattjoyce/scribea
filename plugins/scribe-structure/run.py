@@ -17,7 +17,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _scribe_common import (  # noqa: E402
-    baggage, err, ingress_callback, ok, read_request, with_timer, write_response,
+    Stopwatch, baggage, err, ingress_callback, ok, read_request, write_response,
 )
 
 WORKER = "scribe-structure"
@@ -188,11 +188,13 @@ def main() -> None:
         write_response(err("assembled_context missing", retry=False))
         return
 
+    sw = Stopwatch()
     try:
         system_prompt, schema, template_meta = load_template(templates_dir, template_id)
     except Exception as e:  # noqa: BLE001
         write_response(err(f"template load failed: {e}", retry=False))
         return
+    sw.mark("template_load_ms")
 
     few_shot = render_few_shot(templates_dir, template_id)
     user_content_parts = []
@@ -208,8 +210,8 @@ def main() -> None:
     prompt_hash = hashlib.sha256(
         (system_prompt + "\n###\n" + user_content + "\n###\n" + model).encode("utf-8")
     ).hexdigest()
+    sw.mark("prompt_build_ms")
 
-    elapsed = with_timer()
     structured: dict | None = None
     raw_response: dict = {}
     used_model = "stub"
@@ -220,9 +222,11 @@ def main() -> None:
     if stub_mode or not anthropic_key:
         structured = stub_structured(template_id)
         notes.append("LLM not configured — using stub structured output")
+        sw.mark("stub_ms")
     else:
         try:
             raw_response = call_claude(anthropic_key, model, system_prompt, user_content, timeout)
+            sw.mark("claude_http_ms")
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")[:500]
             write_response(err(f"claude HTTP {e.code}: {body}", retry=e.code >= 500))
@@ -259,31 +263,32 @@ def main() -> None:
     if schema_err:
         write_response(err(f"schema validation failed: {schema_err}", retry=False))
         return
-
-    meta = baggage(
-        WORKER, VERSION,
-        latency_ms=elapsed(),
-        model=used_model,
-        prompt_version=template_meta.get("prompt_version"),
-        extra={
-            "prompt_id": template_meta.get("prompt_id"),
-            "prompt_hash": prompt_hash,
-            "tokens_in": tokens_in,
-            "tokens_out": tokens_out,
-            "stub": stub_mode or used_model == "stub",
-            "notes": notes,
-        },
-    )
+    sw.mark("schema_validate_ms")
 
     try:
         ingress_callback(ingress_url, f"/internal/sessions/{session_id}/structured", {
             "structured": structured,
             "raw_llm_response": raw_response,
-            "meta": meta,
+            "meta": baggage(
+                WORKER, VERSION,
+                latency_ms=sw.total_ms(),
+                model=used_model,
+                prompt_version=template_meta.get("prompt_version"),
+                timings=sw.phases,
+                extra={
+                    "prompt_id": template_meta.get("prompt_id"),
+                    "prompt_hash": prompt_hash,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "stub": stub_mode or used_model == "stub",
+                    "notes": notes,
+                },
+            ),
         })
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress callback failed: {e}", retry=True))
         return
+    sw.mark("ingress_callback_ms")
 
     write_response(ok(
         f"structured {session_id} ({len(json.dumps(structured))} chars JSON)",
@@ -297,7 +302,10 @@ def main() -> None:
                 "prompt_version": template_meta.get("prompt_version"),
             },
         }],
-        logs=[{"level": "info", "message": f"structured (model={used_model})"}],
+        logs=[
+            {"level": "info", "message": f"structured (model={used_model})"},
+            {"level": "debug", "message": f"timings={sw.phases} total={sw.total_ms()}ms"},
+        ],
     ))
 
 

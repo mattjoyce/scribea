@@ -75,8 +75,16 @@ def ingress_get(ingress_url: str, path: str, timeout: float = 30.0) -> dict[str,
 
 def baggage(worker: str, worker_version: str, *, extra: dict | None = None,
             latency_ms: float | None = None, model: str | None = None,
-            prompt_version: str | None = None) -> dict[str, Any]:
-    """Compose the scribe baggage envelope (specseed §4.4)."""
+            prompt_version: str | None = None,
+            timings: dict | None = None) -> dict[str, Any]:
+    """Compose the scribe baggage envelope (specseed §4.4).
+
+    `latency_ms` is the rolled-up total time inside the plugin's main work.
+    `timings` is the disaggregated story: a named map of sub-phase milliseconds
+    (`{ffmpeg_canonicalize_ms: 132, whisper_http_ms: 2200, …}`) used for
+    bottleneck analysis. Both stay — the total is canonical, the breakdown
+    explains it.
+    """
     out: dict[str, Any] = {
         "worker": worker,
         "worker_version": worker_version,
@@ -88,6 +96,8 @@ def baggage(worker: str, worker_version: str, *, extra: dict | None = None,
         out["model"] = model
     if prompt_version is not None:
         out["prompt_version"] = prompt_version
+    if timings is not None:
+        out["timings"] = timings
     if extra:
         out.update(extra)
     return out
@@ -99,3 +109,23 @@ def with_timer():
     importing contextlib for one-liner timing."""
     start = time.perf_counter()
     return lambda: (time.perf_counter() - start) * 1000.0
+
+
+class Stopwatch:
+    """Sub-phase timer. Call ``mark(name)`` after each named phase; the elapsed
+    ms since the last mark (or since construction) is recorded under ``name``
+    in ``.phases``. Total wall time available via ``.total_ms()``. Cheap —
+    uses ``time.perf_counter()``."""
+
+    def __init__(self) -> None:
+        self.start = time.perf_counter()
+        self.last = self.start
+        self.phases: dict[str, int] = {}
+
+    def mark(self, name: str) -> None:
+        now = time.perf_counter()
+        self.phases[name] = int((now - self.last) * 1000)
+        self.last = now
+
+    def total_ms(self) -> int:
+        return int((time.perf_counter() - self.start) * 1000)

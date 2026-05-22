@@ -18,7 +18,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _scribe_common import (  # noqa: E402
-    baggage, err, ingress_callback, ok, read_request, with_timer, write_response,
+    Stopwatch, baggage, err, ingress_callback, ok, read_request, write_response,
 )
 
 WORKER = "scribe-format"
@@ -129,7 +129,7 @@ def main() -> None:
         write_response(err("structured payload missing or empty", retry=False))
         return
 
-    elapsed = with_timer()
+    sw = Stopwatch()
     template_dir = os.path.join(templates_dir, template_id)
     try:
         with open(os.path.join(template_dir, "render.tmpl"), encoding="utf-8") as f:
@@ -139,6 +139,7 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         write_response(err(f"template load failed: {e}", retry=False))
         return
+    sw.mark("template_load_ms")
 
     # Fetch session view for header fields.
     try:
@@ -147,6 +148,7 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress GET failed: {e}", retry=True))
         return
+    sw.mark("ingress_get_ms")
 
     session = session_view.get("session") or {}
     clips = session_view.get("clips") or []
@@ -168,20 +170,21 @@ def main() -> None:
         "plan": structured.get("plan", []),
     }
     markdown = render(tmpl, ctx)
+    sw.mark("render_ms")
 
-    meta = baggage(
-        WORKER, VERSION, latency_ms=elapsed(),
-        extra={"template_id": template_id, "char_count": len(markdown)},
-    )
     try:
         ingress_callback(ingress_url, f"/internal/sessions/{session_id}/completed", {
             "markdown": markdown,
             "structured": structured,
-            "meta": meta,
+            "meta": baggage(
+                WORKER, VERSION, latency_ms=sw.total_ms(), timings=sw.phases,
+                extra={"template_id": template_id, "char_count": len(markdown)},
+            ),
         })
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress callback failed: {e}", retry=True))
         return
+    sw.mark("ingress_callback_ms")
 
     write_response(ok(
         f"formatted {session_id} ({len(markdown)} chars)",
@@ -189,7 +192,10 @@ def main() -> None:
             "type": "scribe.session.completed.v1",
             "payload": {"session_id": session_id, "markdown": markdown},
         }],
-        logs=[{"level": "info", "message": "session completed"}],
+        logs=[
+            {"level": "info", "message": "session completed"},
+            {"level": "debug", "message": f"timings={sw.phases} total={sw.total_ms()}ms"},
+        ],
     ))
 
 

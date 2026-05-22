@@ -16,7 +16,7 @@ import uuid as _uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _scribe_common import (  # noqa: E402
-    baggage, err, ingress_callback, ok, read_request, with_timer, write_response,
+    Stopwatch, baggage, err, ingress_callback, ok, read_request, write_response,
 )
 
 WORKER = "scribe-transcribe"
@@ -48,9 +48,7 @@ def _build_multipart(file_path: str, audio_format: str, clip_id: str) -> tuple[b
     return b"".join(parts), "multipart/form-data; boundary=" + boundary
 
 
-def transcribe_via_whisper(whisper_url: str, blob_path: str, audio_format: str,
-                           clip_id: str, timeout: float) -> dict:
-    body, content_type = _build_multipart(blob_path, audio_format, clip_id)
+def _post_whisper(whisper_url: str, body: bytes, content_type: str, timeout: float) -> dict:
     req = urllib.request.Request(
         whisper_url.rstrip("/") + "/transcribe-full",
         data=body,
@@ -88,7 +86,7 @@ def main() -> None:
         write_response(err("missing session_id/clip_id/blob_path in payload", retry=False))
         return
 
-    elapsed = with_timer()
+    sw = Stopwatch()
     transcript_text = ""
     segments: list[dict] = []
     model = "stub"
@@ -98,9 +96,13 @@ def main() -> None:
     if stub_mode or not whisper_url:
         transcript_text = f"[stub transcript for clip {clip_id} — wire WHISPER_URL to get a real one]"
         segments = [{"start": 0.0, "end": 1.0, "text": transcript_text}]
+        sw.mark("stub_ms")
     else:
         try:
-            resp = transcribe_via_whisper(whisper_url, blob_path, audio_format, clip_id, timeout)
+            body, content_type = _build_multipart(blob_path, audio_format, clip_id)
+            sw.mark("multipart_build_ms")
+            resp = _post_whisper(whisper_url, body, content_type, timeout)
+            sw.mark("whisper_http_ms")
             transcript_text = (resp.get("text") or "").strip()
             segments = resp.get("segments") or []
             model = resp.get("model") or "unknown"
@@ -108,7 +110,8 @@ def main() -> None:
             # Network or service down — emit clip.failed.v1 and callback ingress so the
             # session sweeper / assembly path can move on with a gap.
             reason = f"whisper unreachable: {e}"
-            meta = baggage(WORKER, VERSION, latency_ms=elapsed(), model="error",
+            meta = baggage(WORKER, VERSION, latency_ms=sw.total_ms(),
+                           model="error", timings=sw.phases,
                            extra={"stt_model": "error", "audio_format": audio_format})
             try:
                 ingress_callback(ingress_url, f"/internal/clips/{clip_id}/failed", {
@@ -132,26 +135,28 @@ def main() -> None:
             write_response(err(f"transcribe error: {e}", retry=True))
             return
 
-    meta = baggage(
-        WORKER, VERSION, latency_ms=elapsed(), model=model,
-        extra={
-            "stt_model": model,
-            "audio_format": audio_format,
-            "stub": stub_mode or model == "stub",
-        },
-    )
-
-    # Persist back to scribe.db via ingress.
+    # Persist back to scribe.db via ingress. Note: latency_ms in meta is
+    # captured BEFORE the callback (we can't update once sent); the total
+    # wall time including the callback shows up only in the debug log here.
     try:
         ingress_callback(ingress_url, f"/internal/clips/{clip_id}/transcribed", {
             "transcript": transcript_text,
             "segments": segments,
-            "meta": meta,
+            "meta": baggage(
+                WORKER, VERSION, latency_ms=sw.total_ms(), model=model,
+                timings=sw.phases,
+                extra={
+                    "stt_model": model,
+                    "audio_format": audio_format,
+                    "stub": stub_mode or model == "stub",
+                },
+            ),
             "session_id": session_id,
         })
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress callback failed: {e}", retry=True))
         return
+    sw.mark("ingress_callback_ms")
 
     write_response(ok(
         f"transcribed clip {clip_id} ({len(transcript_text)} chars)",
@@ -164,7 +169,10 @@ def main() -> None:
                 "segments": segments,
             },
         }],
-        logs=[{"level": "info", "message": f"clip {clip_id} transcribed (model={model})"}],
+        logs=[
+            {"level": "info", "message": f"clip {clip_id} transcribed (model={model})"},
+            {"level": "debug", "message": f"timings={sw.phases} total={sw.total_ms()}ms"},
+        ],
     ))
 
 

@@ -24,7 +24,7 @@ import wave
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _scribe_common import (  # noqa: E402
-    baggage, err, ingress_callback, ok, read_request, with_timer, write_response,
+    Stopwatch, baggage, err, ingress_callback, ok, read_request, write_response,
 )
 
 WORKER = "scribe-audio-preprocess"
@@ -194,7 +194,7 @@ def main() -> None:
         write_response(err(f"input blob not found: {blob_path}", retry=False))
         return
 
-    elapsed = with_timer()
+    sw = Stopwatch()
 
     # ffmpeg writes the cleaned WAV to a temp file; we sha256 it, then move
     # to blobs_dir. The raw-decoded WAV (no HPF) is written next to it for
@@ -206,6 +206,7 @@ def main() -> None:
     try:
         success, stderr_tail = ffmpeg_pcm(ffmpeg_bin, blob_path, tmp_out,
                                           apply_hpf=True, timeout=timeout)
+        sw.mark("ffmpeg_canonicalize_ms")
         if not success:
             # Audit + emit a failure event so assemble can note the gap.
             reason = f"ffmpeg_failed: {stderr_tail}".strip()
@@ -215,7 +216,8 @@ def main() -> None:
                     "original_audio_ref": original_audio_ref,
                     "reason": reason,
                     "stage": "canonicalize",
-                    "meta": baggage(WORKER, VERSION, latency_ms=elapsed(),
+                    "meta": baggage(WORKER, VERSION, latency_ms=sw.total_ms(),
+                                    timings=sw.phases,
                                     extra={"stage": "canonicalize"}),
                 })
             except Exception:  # noqa: BLE001
@@ -237,6 +239,7 @@ def main() -> None:
             return
 
         sum_hex = sha256_file(tmp_out)
+        sw.mark("sha256_ms")
         dest = os.path.join(blobs_dir, sum_hex)
         if not os.path.exists(dest):
             os.rename(tmp_out, dest)
@@ -252,6 +255,7 @@ def main() -> None:
         processed_quality: dict | None = None
         raw_success, raw_err = ffmpeg_pcm(ffmpeg_bin, blob_path, raw_tmp,
                                           apply_hpf=False, timeout=timeout)
+        sw.mark("ffmpeg_decode_raw_ms")
         if raw_success:
             try:
                 raw_samples, _, _ = read_mono_s16(raw_tmp)
@@ -265,6 +269,7 @@ def main() -> None:
             processed_quality = quality_block(processed_samples)
         except Exception as e:  # noqa: BLE001
             warnings.append(f"processed_quality_failed:{type(e).__name__}")
+        sw.mark("quality_measure_ms")
     finally:
         if tmp_out and os.path.exists(tmp_out):
             try: os.remove(tmp_out)
@@ -301,12 +306,6 @@ def main() -> None:
         "warnings": warnings,
     }
 
-    meta = baggage(WORKER, VERSION, latency_ms=elapsed(),
-                   extra={"filters": preprocessing["filters"],
-                          "output_audio_ref": new_audio_ref,
-                          "verdict_raw": (raw_quality or {}).get("verdict"),
-                          "verdict_processed": (processed_quality or {}).get("verdict")})
-
     try:
         ingress_callback(ingress_url, f"/internal/clips/{clip_id}/preprocessed", {
             "session_id": session_id,
@@ -315,12 +314,25 @@ def main() -> None:
             "blob_path": dest,
             "preprocessing": preprocessing,
             "quality": quality_payload,
-            "meta": meta,
+            # NB: meta carries the rolled-up baggage below; we build it after
+            # this callback so ingress_callback_ms can be measured.
+            "meta": baggage(WORKER, VERSION, latency_ms=sw.total_ms(),
+                            timings=sw.phases,
+                            extra={"filters": preprocessing["filters"],
+                                   "output_audio_ref": new_audio_ref,
+                                   "verdict_raw": (raw_quality or {}).get("verdict"),
+                                   "verdict_processed": (processed_quality or {}).get("verdict")}),
         })
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress callback failed: {e}", retry=True))
         return
+    sw.mark("ingress_callback_ms")
 
+    # Note: the meta baggage we passed to ingress was captured BEFORE the
+    # callback completed; the post-callback `ingress_callback_ms` mark lives
+    # in the response logs only for now. Audit consumers should read
+    # meta.timings from clip.meta.preprocessing-side (which has the post-
+    # callback view) when reasoning about whole-stage cost.
     write_response(ok(
         f"preprocessed clip {clip_id} -> {new_audio_ref[:14]}…",
         events=[{
@@ -336,10 +348,13 @@ def main() -> None:
                 "quality": quality_payload,
             },
         }],
-        logs=[{"level": "info",
-               "message": f"clip {clip_id} preprocessed "
-                          f"(raw={(raw_quality or {}).get('verdict')}, "
-                          f"processed={(processed_quality or {}).get('verdict')})"}],
+        logs=[
+            {"level": "info",
+             "message": f"clip {clip_id} preprocessed "
+                        f"(raw={(raw_quality or {}).get('verdict')}, "
+                        f"processed={(processed_quality or {}).get('verdict')})"},
+            {"level": "debug", "message": f"timings={sw.phases} total={sw.total_ms()}ms"},
+        ],
     ))
 
 
