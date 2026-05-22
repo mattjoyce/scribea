@@ -81,7 +81,14 @@ func main() {
 	if err := os.MkdirAll(cfg.blobsDir, 0o755); err != nil {
 		log.Fatalf("mkdir blobs: %v", err)
 	}
-	abs, _ := filepath.Abs(cfg.blobsDir)
+	// Resolve blobsDir to absolute exactly once at startup. Every blob_path
+	// stamped into events + emitted to Ductile must be absolute, otherwise
+	// plugins spawned by Ductile (different cwd) can't read the file.
+	abs, err := filepath.Abs(cfg.blobsDir)
+	if err != nil {
+		log.Fatalf("resolve blobs dir: %v", err)
+	}
+	cfg.blobsDir = abs
 	log.Printf("blobs dir: %s", abs)
 
 	db, err := sql.Open("sqlite", cfg.dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")

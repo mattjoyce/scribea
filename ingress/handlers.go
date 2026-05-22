@@ -485,6 +485,93 @@ func (s *server) handleGetBaggage(w http.ResponseWriter, r *http.Request) {
 
 // ----- internal callbacks from workers -----
 
+type clipPreprocessedReq struct {
+	SessionID        string          `json:"session_id"`
+	AudioRef         string          `json:"audio_ref"`          // sha256: of cleaned WAV
+	OriginalAudioRef string          `json:"original_audio_ref"` // sha256: of upload
+	BlobPath         string          `json:"blob_path"`          // absolute path to cleaned WAV
+	Preprocessing   json.RawMessage `json:"preprocessing"`
+	Meta            json.RawMessage `json:"meta"`
+}
+
+func (s *server) handleInternalClipPreprocessed(w http.ResponseWriter, r *http.Request) {
+	clipID := r.PathValue("id")
+	var req clipPreprocessedReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	// Stash the preprocessing block under meta.preprocessing. Sibling keys
+	// (upload-time `audio`, future stage stamps) are preserved by mergeClipMetaKey.
+	if err := s.mergeClipMetaKey(clipID, "preprocessing", req.Preprocessing); err != nil {
+		writeError(w, 500, "db_merge_meta", err.Error())
+		return
+	}
+	var pp map[string]any
+	_ = json.Unmarshal(req.Preprocessing, &pp)
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	dataB, _ := json.Marshal(map[string]any{
+		"clip_id":             clipID,
+		"audio_ref":           req.AudioRef,
+		"original_audio_ref":  req.OriginalAudioRef,
+		"blob_path":           req.BlobPath,
+		"preprocessing":       pp,
+	})
+	if err := s.appendEvent(eventRow{
+		EventID:   uuid.NewString(),
+		EventType: "scribe.clip.preprocessed.v1",
+		EventTime: now,
+		SessionID: req.SessionID,
+		ClipID:    &clipID,
+		Data:      dataB,
+		Meta:      req.Meta,
+	}); err != nil {
+		writeError(w, 500, "append_event", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+type clipPreprocessFailedReq struct {
+	SessionID        string          `json:"session_id"`
+	OriginalAudioRef string          `json:"original_audio_ref"`
+	Reason           string          `json:"reason"`
+	Stage            string          `json:"stage"`
+	Meta             json.RawMessage `json:"meta"`
+}
+
+func (s *server) handleInternalClipPreprocessFailed(w http.ResponseWriter, r *http.Request) {
+	clipID := r.PathValue("id")
+	var req clipPreprocessFailedReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	// Mark the clip failed so assemble notes the gap honestly.
+	if err := s.updateClipFailed(clipID, req.Meta); err != nil {
+		writeError(w, 500, "db_update", err.Error())
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	dataB, _ := json.Marshal(map[string]any{
+		"clip_id":            clipID,
+		"original_audio_ref": req.OriginalAudioRef,
+		"reason":             req.Reason,
+		"stage":              req.Stage,
+	})
+	_ = s.appendEvent(eventRow{
+		EventID:   uuid.NewString(),
+		EventType: "scribe.clip.preprocess_failed.v1",
+		EventTime: now,
+		SessionID: req.SessionID,
+		ClipID:    &clipID,
+		Data:      dataB,
+		Meta:      req.Meta,
+	})
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
 type clipTranscribedReq struct {
 	Transcript string          `json:"transcript"`
 	Segments   json.RawMessage `json:"segments"`

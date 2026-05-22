@@ -1,0 +1,45 @@
+manifest_spec: ductile.plugin
+manifest_version: 1
+name: scribe-audio-preprocess
+version: 0.1.0
+protocol: 2
+entrypoint: run.py
+description: "Canonicalize each clip to 16 kHz mono s16le WAV with an 80 Hz high-pass, sha256-address the cleaned WAV in the blob store, and emit scribe.clip.preprocessed.v1 for the transcribe step. Step 1 scope — no quality metrics or VAD yet (see docs/scribe-audio-preprocess.md §7 for the planned dual-block quality block)."
+concurrency_safe: true
+commands:
+  - name: handle
+    type: write
+    description: "Preprocess one clip: ffmpeg canonicalize + HPF, sha256-address output, callback ingress."
+    idempotent: true
+    retry_safe: true
+    values:
+      consume:
+        - payload.session_id
+        - payload.clip_id
+        - payload.audio_ref
+        - payload.blob_path
+        - payload.audio_format
+        - payload.audio
+      emit:
+        - event: scribe.clip.preprocessed.v1
+          values:
+            - payload.session_id
+            - payload.clip_id
+            - payload.audio_ref
+            - payload.original_audio_ref
+            - payload.blob_path
+            - payload.preprocessing
+        - event: scribe.clip.preprocess_failed.v1
+          values:
+            - payload.session_id
+            - payload.clip_id
+            - payload.original_audio_ref
+            - payload.reason
+            - payload.stage
+  - name: health
+    type: read
+    idempotent: true
+    retry_safe: true
+config_keys:
+  required: [ingress_url, blobs_dir]
+  optional: [ffmpeg_bin, request_timeout_seconds]

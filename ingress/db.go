@@ -218,21 +218,63 @@ func (s *server) getClip(clipID string) (*clipRow, error) {
 	return &r, nil
 }
 
-func (s *server) updateClipTranscribed(clipID, transcript string, segments json.RawMessage, meta json.RawMessage) error {
+func (s *server) updateClipTranscribed(clipID, transcript string, segments json.RawMessage, workerMeta json.RawMessage) error {
+	// Stash the worker's baggage envelope under meta.transcribe so we don't
+	// wipe sibling stage stamps (upload-time `audio`, `preprocessing`, etc.).
+	if err := s.mergeClipMetaKey(clipID, "transcribe", workerMeta); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(
-		`UPDATE clips SET state='transcribed', transcript=?, transcript_segments=?, meta=?
+		`UPDATE clips SET state='transcribed', transcript=?, transcript_segments=?
 		 WHERE clip_id=?`,
-		transcript, string(segments), string(meta), clipID,
+		transcript, string(segments), clipID,
 	)
 	return err
 }
 
-func (s *server) updateClipFailed(clipID string, meta json.RawMessage) error {
+func (s *server) updateClipFailed(clipID string, workerMeta json.RawMessage) error {
+	if err := s.mergeClipMetaKey(clipID, "failure", workerMeta); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(
-		`UPDATE clips SET state='failed', meta=? WHERE clip_id=?`,
-		string(meta), clipID,
+		`UPDATE clips SET state='failed' WHERE clip_id=?`,
+		clipID,
 	)
 	return err
+}
+
+// mergeClipMetaKey does read-modify-write of clips.meta, stashing the given
+// value under meta[key]. Preserves every sibling key so each pipeline stage
+// (upload, preprocess, transcribe, future stages) owns its own namespace
+// without trampling the others. Single-writer guarantee comes from SQLite's
+// row lock — concurrent callers serialise, last writer wins for a given key.
+func (s *server) mergeClipMetaKey(clipID, key string, value json.RawMessage) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // commit clears it; rollback on error path
+	var existing string
+	if err := tx.QueryRow(`SELECT meta FROM clips WHERE clip_id=?`, clipID).Scan(&existing); err != nil {
+		return err
+	}
+	meta := map[string]any{}
+	if existing != "" {
+		_ = json.Unmarshal([]byte(existing), &meta)
+	}
+	var v any
+	if len(value) > 0 {
+		_ = json.Unmarshal(value, &v)
+	}
+	meta[key] = v
+	b, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE clips SET meta=? WHERE clip_id=?`, string(b), clipID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *server) nextClipSeq(sessionID string) (int, error) {

@@ -33,6 +33,8 @@ func (s *server) registerRoutes(mux *http.ServeMux) {
 	// Internal callback endpoints used by the worker plugins to write their
 	// results back to scribe.db without each plugin needing a separate DB
 	// connection. Plugin → ingress → scribe.db keeps the writer count low.
+	mux.HandleFunc("POST /internal/clips/{id}/preprocessed", s.handleInternalClipPreprocessed)
+	mux.HandleFunc("POST /internal/clips/{id}/preprocess_failed", s.handleInternalClipPreprocessFailed)
 	mux.HandleFunc("POST /internal/clips/{id}/transcribed", s.handleInternalClipTranscribed)
 	mux.HandleFunc("POST /internal/clips/{id}/failed", s.handleInternalClipFailed)
 	mux.HandleFunc("POST /internal/sessions/{id}/assembled", s.handleInternalAssembled)
