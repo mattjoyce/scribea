@@ -40,13 +40,16 @@ export const api = {
   listClips: (id) => jsonFetch(`/sessions/${encodeURIComponent(id)}/clips`),
 
   // Multipart clip upload. Idempotency-Key is REQUIRED.
-  uploadClip: async ({ session_id, clip_id, started_at, duration_ms, seq, audio_format, blob }) => {
+  uploadClip: async ({ session_id, clip_id, started_at, duration_ms, seq, audio_format, audio, blob }) => {
     const fd = new FormData();
     fd.append("clip_id", clip_id);
     fd.append("started_at", started_at);
     fd.append("duration_ms", String(duration_ms));
     fd.append("seq", String(seq));
     fd.append("audio_format", audio_format);
+    // Named audio values captured by the recorder (mime, sample_rate_hz,
+    // channels, bit_rate_bps, …). Ingress merges with ffprobe ground truth.
+    if (audio) fd.append("audio_meta", JSON.stringify(audio));
     const filename = `clip-${clip_id}.${audio_format.includes("webm") ? "webm" : "m4a"}`;
     fd.append("audio", blob, filename);
     const res = await fetch(`${BASE}/sessions/${encodeURIComponent(session_id)}/clips`, {

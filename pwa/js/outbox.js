@@ -149,6 +149,7 @@ async function attemptUpload(entry) {
       duration_ms: entry.duration_ms,
       seq: entry.seq,
       audio_format: entry.audio_format,
+      audio: entry.audio,
       blob: entry.blob,
     });
     const updated = { ...entry, state: "confirmed", confirmed_at: Date.now(), last_error: null };

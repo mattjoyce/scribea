@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -267,12 +268,29 @@ func (s *server) handleUploadClip(w http.ResponseWriter, r *http.Request) {
 	}
 	audioRef := "sha256:" + sum
 
+	// Resolve audio shape: named values from the PWA + ground truth from
+	// ffprobe on the saved blob. Both best-effort; if neither produces
+	// anything we still write the upload with `audio: null`.
+	var pwaAudio map[string]any
+	if raw := r.FormValue("audio_meta"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &pwaAudio); err != nil {
+			log.Printf("audio_meta parse failed: %v (ignoring PWA-supplied audio map)", err)
+		}
+	}
+	audioInfo := mergeAudio(pwaAudio, ffprobeAudio(dest))
+	if audioInfo != nil {
+		if _, ok := audioInfo["size_bytes"]; !ok {
+			audioInfo["size_bytes"] = hdr.Size
+		}
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	clipMeta, _ := json.Marshal(map[string]any{
-		"audio_format":   audioFormat,
-		"original_name":  hdr.Filename,
-		"uploaded_at":    now,
-		"upload_size":    hdr.Size,
+		"audio_format":  audioFormat,
+		"original_name": hdr.Filename,
+		"uploaded_at":   now,
+		"upload_size":   hdr.Size,
+		"audio":         audioInfo,
 	})
 
 	if err := s.insertClip(clipRow{
@@ -295,14 +313,15 @@ func (s *server) handleUploadClip(w http.ResponseWriter, r *http.Request) {
 
 	eventID := uuid.NewString()
 	dataB, _ := json.Marshal(map[string]any{
-		"clip_id":     clipID,
-		"audio_ref":   audioRef,
-		"seq":         seq,
-		"started_at":  startedAt,
-		"duration_ms": durationMs,
+		"clip_id":      clipID,
+		"audio_ref":    audioRef,
+		"seq":          seq,
+		"started_at":   startedAt,
+		"duration_ms":  durationMs,
 		"audio_format": audioFormat,
-		"blob_path":   dest,
-		"session_id":  sessionID,
+		"audio":        audioInfo,
+		"blob_path":    dest,
+		"session_id":   sessionID,
 	})
 	if err := s.appendEvent(eventRow{
 		EventID:   eventID,
@@ -326,6 +345,7 @@ func (s *server) handleUploadClip(w http.ResponseWriter, r *http.Request) {
 		"seq":          seq,
 		"duration_ms":  durationMs,
 		"audio_format": audioFormat,
+		"audio":        audioInfo,
 	}); err != nil {
 		log.Printf("ductile emit clip.received failed: %v (clip will need manual retry)", err)
 	}
@@ -681,6 +701,109 @@ const ingressVersion = "0.1.0"
 func validUUID(s string) bool {
 	_, err := uuid.Parse(s)
 	return err == nil
+}
+
+// ffprobeAudio shells out to ffprobe and returns a named audio map for the
+// first audio stream in the file. Returns nil if ffprobe is missing or fails;
+// the caller should treat ground-truth as best-effort, not load-bearing.
+func ffprobeAudio(path string) map[string]any {
+	cmd := exec.Command(
+		"ffprobe", "-v", "quiet", "-print_format", "json",
+		"-show_format", "-show_streams", "-select_streams", "a:0",
+		path,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var parsed struct {
+		Format struct {
+			FormatName string `json:"format_name"`
+			BitRate    string `json:"bit_rate"`
+			Size       string `json:"size"`
+			Duration   string `json:"duration"`
+		} `json:"format"`
+		Streams []struct {
+			CodecName     string `json:"codec_name"`
+			CodecType     string `json:"codec_type"`
+			SampleRate    string `json:"sample_rate"`
+			Channels      int    `json:"channels"`
+			BitsPerSample int    `json:"bits_per_sample"`
+			BitRate       string `json:"bit_rate"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		return nil
+	}
+	m := map[string]any{}
+	if len(parsed.Streams) > 0 {
+		s := parsed.Streams[0]
+		if s.CodecName != "" {
+			m["codec"] = s.CodecName
+		}
+		if s.SampleRate != "" {
+			if n, err := strconv.Atoi(s.SampleRate); err == nil {
+				m["sample_rate_hz"] = n
+			}
+		}
+		if s.Channels > 0 {
+			m["channels"] = s.Channels
+		}
+		if s.BitsPerSample > 0 {
+			m["bit_depth"] = s.BitsPerSample
+		}
+		if s.BitRate != "" {
+			if n, err := strconv.Atoi(s.BitRate); err == nil {
+				m["bit_rate_bps"] = n
+			}
+		}
+	}
+	if parsed.Format.FormatName != "" {
+		m["container"] = parsed.Format.FormatName
+	}
+	if _, has := m["bit_rate_bps"]; !has && parsed.Format.BitRate != "" {
+		if n, err := strconv.Atoi(parsed.Format.BitRate); err == nil {
+			m["bit_rate_bps"] = n
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// mergeAudio combines the PWA's best-effort view (browser MediaRecorder +
+// getSettings) with ffprobe's ground truth. Ground truth wins on conflict.
+// Stamps `audio.source` so the audit trail says where each came from.
+func mergeAudio(pwa, probed map[string]any) map[string]any {
+	if pwa == nil && probed == nil {
+		return nil
+	}
+	out := map[string]any{}
+	for k, v := range pwa {
+		if k == "source" {
+			continue
+		}
+		if v == nil {
+			continue
+		}
+		out[k] = v
+	}
+	for k, v := range probed {
+		if v == nil {
+			continue
+		}
+		out[k] = v
+	}
+	switch {
+	case len(pwa) > 0 && len(probed) > 0:
+		out["source"] = "pwa+ffprobe"
+	case len(probed) > 0:
+		out["source"] = "ffprobe"
+	default:
+		out["source"] = "pwa"
+	}
+	return out
 }
 
 // runSweeper finds idle sessions and synthesizes timeout closes per ADR-0004.

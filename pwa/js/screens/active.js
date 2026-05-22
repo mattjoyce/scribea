@@ -179,6 +179,7 @@ export async function mountActive(root, sessionId) {
           started_at: clip.started_at,
           duration_ms: clip.duration_ms,
           audio_format: clip.audio_format,
+          audio: clip.audio,
           blob: clip.blob,
           meta: clip.meta,
         });

@@ -6,6 +6,38 @@ const HARD_CAP_MS = 10 * 60 * 1000;   // 10 minutes
 const WARN_AT_MS  = 8 * 60 * 1000;    // 8 minutes
 const TICK_MS = 250;
 
+// Capture audio shape from the MediaRecorder + audio track. Best-effort;
+// Safari may not populate every getSettings() field. Ingress runs ffprobe on
+// the blob and merges, so this is just the browser's view.
+function audioMetadataFrom(recorder, stream, sizeBytes) {
+  const out = { source: "pwa" };
+  out.mime = (recorder && recorder.mimeType) || "";
+  if (recorder && recorder.audioBitsPerSecond) {
+    out.bit_rate_bps = recorder.audioBitsPerSecond; // browser's requested rate
+  }
+  if (typeof sizeBytes === "number") out.size_bytes = sizeBytes;
+  // Parse container + codec from mime: "audio/webm;codecs=opus"
+  if (out.mime) {
+    const m = out.mime.match(/^([^/]+)\/([^;]+)(?:;\s*codecs?=([^,;\s]+))?/i);
+    if (m) {
+      out.container = m[2];
+      if (m[3]) out.codec = m[3].toLowerCase();
+    }
+  }
+  try {
+    if (stream && stream.getAudioTracks) {
+      const t = stream.getAudioTracks()[0];
+      if (t && t.getSettings) {
+        const s = t.getSettings();
+        if (s.sampleRate)   out.sample_rate_hz = s.sampleRate;
+        if (s.channelCount) out.channels       = s.channelCount;
+        if (s.sampleSize)   out.bit_depth      = s.sampleSize;
+      }
+    }
+  } catch { /* ignore */ }
+  return out;
+}
+
 function pickMimeType() {
   const candidates = [
     "audio/webm;codecs=opus",
@@ -96,11 +128,13 @@ export class ClipRecorder {
     const type = (this.recorder && this.recorder.mimeType) || this.mimeType || "audio/webm";
     const blob = new Blob(this.chunks, { type });
     this.chunks = [];
+    const audio = audioMetadataFrom(this.recorder, this.stream, blob.size);
     const clip = {
       clip_id: this.currentClipId,   // generated at Start (spec §9.2)
       started_at: this.startedAt,
       duration_ms,
       audio_format: type,
+      audio,                         // named values: see audioMetadataFrom() below
       blob,
       seq: this.nextSeq(),
       meta: this._autoRolledFlag ? { auto_rolled: true } : {},
