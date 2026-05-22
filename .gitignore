@@ -8,6 +8,7 @@ blobs/
 *.db-journal
 
 ## Build artifacts
+/bin/
 /ingress/scribe-ingress
 /ingress/bin/
 /pwa/dist/
