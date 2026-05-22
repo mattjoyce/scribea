@@ -490,8 +490,9 @@ type clipPreprocessedReq struct {
 	AudioRef         string          `json:"audio_ref"`          // sha256: of cleaned WAV
 	OriginalAudioRef string          `json:"original_audio_ref"` // sha256: of upload
 	BlobPath         string          `json:"blob_path"`          // absolute path to cleaned WAV
-	Preprocessing   json.RawMessage `json:"preprocessing"`
-	Meta            json.RawMessage `json:"meta"`
+	Preprocessing    json.RawMessage `json:"preprocessing"`
+	Quality          json.RawMessage `json:"quality,omitempty"`  // {raw, processed} per spec §7
+	Meta             json.RawMessage `json:"meta"`
 }
 
 func (s *server) handleInternalClipPreprocessed(w http.ResponseWriter, r *http.Request) {
@@ -501,22 +502,32 @@ func (s *server) handleInternalClipPreprocessed(w http.ResponseWriter, r *http.R
 		writeError(w, 400, "bad_json", err.Error())
 		return
 	}
-	// Stash the preprocessing block under meta.preprocessing. Sibling keys
-	// (upload-time `audio`, future stage stamps) are preserved by mergeClipMetaKey.
+	// Stash the preprocessing block under meta.preprocessing and the quality
+	// block under meta.quality. Sibling keys (upload-time `audio`, future
+	// stage stamps) are preserved by mergeClipMetaKey.
 	if err := s.mergeClipMetaKey(clipID, "preprocessing", req.Preprocessing); err != nil {
 		writeError(w, 500, "db_merge_meta", err.Error())
 		return
 	}
+	if len(req.Quality) > 0 {
+		if err := s.mergeClipMetaKey(clipID, "quality", req.Quality); err != nil {
+			writeError(w, 500, "db_merge_meta", err.Error())
+			return
+		}
+	}
 	var pp map[string]any
 	_ = json.Unmarshal(req.Preprocessing, &pp)
+	var qual map[string]any
+	_ = json.Unmarshal(req.Quality, &qual)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	dataB, _ := json.Marshal(map[string]any{
-		"clip_id":             clipID,
-		"audio_ref":           req.AudioRef,
-		"original_audio_ref":  req.OriginalAudioRef,
-		"blob_path":           req.BlobPath,
-		"preprocessing":       pp,
+		"clip_id":            clipID,
+		"audio_ref":          req.AudioRef,
+		"original_audio_ref": req.OriginalAudioRef,
+		"blob_path":          req.BlobPath,
+		"preprocessing":      pp,
+		"quality":            qual,
 	})
 	if err := s.appendEvent(eventRow{
 		EventID:   uuid.NewString(),
