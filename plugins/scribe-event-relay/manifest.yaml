@@ -1,0 +1,30 @@
+manifest_spec: ductile.plugin
+manifest_version: 1
+name: scribe-event-relay
+version: 0.1.0
+protocol: 2
+entrypoint: run.py
+description: "Passthrough relay. Accepts {event_type, data} from scribe-ingress and emits the named event so Ductile pipelines can route it. Removes the need for ingress to speak the bus protocol directly."
+concurrency_safe: true
+commands:
+  - name: handle
+    type: write
+    description: "Emit the inner event as the outer event."
+    idempotent: true
+    retry_safe: true
+    values:
+      consume:
+        - payload.event_type
+        - payload.data
+      emit:
+        - event: "*"
+          values:
+            - "payload.*"
+  - name: health
+    type: read
+    description: "Liveness check."
+    idempotent: true
+    retry_safe: true
+config_keys:
+  required: []
+  optional: []

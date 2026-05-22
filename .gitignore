@@ -1,0 +1,45 @@
+## Blobs (content-addressed audio store)
+blobs/
+
+## SQLite
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+## Build artifacts
+/ingress/scribe-ingress
+/ingress/bin/
+/pwa/dist/
+/pwa/node_modules/
+
+## Logs
+*.log
+logs/
+
+## Env
+.env
+.env.local
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Editor
+.idea/
+.vscode/
+*.swp
+*~
+
+## Python (plugin venvs)
+plugins/**/__pycache__/
+plugins/**/.venv/
+plugins/**/*.pyc
+
+## Go
+ingress/vendor/
+
+## Beads
+.beads/*.db
+.beads/*.db-wal
+.beads/*.db-shm

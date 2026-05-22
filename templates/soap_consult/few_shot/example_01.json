@@ -1,0 +1,16 @@
+{
+  "_comment": "Illustrative few-shot. Input is the assembled context fragment; output is the structured SOAP. Used to anchor format, not to memorize content.",
+  "input": "[clip 1, 00:00]\nPatient: I've had this cough for about three weeks now. It's worse at night. No fever but I do feel a bit short of breath when I climb the stairs.\nClinician: Any chest pain? Bringing up phlegm?\nPatient: No chest pain. A bit of clear phlegm in the mornings.\n\n[clip 2, 00:00]\nClinician: I'm going to listen to your chest. ... Mild wheeze on the right side. Sats 96 on room air. Heart rate 78, regular. BP 124 over 78.\n\n[clip 3, 00:00]\nClinician: I think this is most likely a post-viral cough with some bronchial irritation, but given the three-week duration I'd like to rule out anything else. I'm going to order a chest X-ray and a basic blood panel. Try a salbutamol inhaler — two puffs as needed for the breathlessness. If you get any chest pain, high fever, or coughing up blood, go to A&E. Otherwise see me again in two weeks with the results.",
+  "output": {
+    "subjective": "Three-week history of cough, worse at night, with associated mild exertional dyspnoea on stair-climbing [clip 1]. No fever. Small volume clear sputum in the mornings. No chest pain.",
+    "objective": "Mild expiratory wheeze right side. SpO2 96% room air. HR 78 regular. BP 124/78 [clip 2].",
+    "assessment": "Likely post-viral cough with bronchial irritation; duration warrants exclusion of alternative causes [clip 3].",
+    "plan": [
+      "Chest X-ray.",
+      "Basic blood panel (FBC, CRP).",
+      "Trial salbutamol inhaler, 2 puffs PRN for breathlessness.",
+      "Safety net: present to A&E for chest pain, high fever, or haemoptysis.",
+      "Review in 2 weeks with results."
+    ]
+  }
+}

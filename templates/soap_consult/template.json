@@ -1,0 +1,9 @@
+{
+  "template_id": "soap_consult",
+  "version": "1.0.0",
+  "name": "SOAP consult",
+  "description": "Standard SOAP note for a general consultation",
+  "prompt_id": "soap_consult_v1",
+  "prompt_version": "1.0.0",
+  "timeout_minutes": 15
+}

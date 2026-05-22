@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scribe</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="data:,">
+  <meta name="theme-color" content="#ffffff">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand">scribe</a>
+    <nav>
+      <a href="#/" class="navlink">sessions</a>
+      <a href="#/new" class="navlink">new</a>
+    </nav>
+    <span id="status-pill" class="pill"></span>
+  </header>
+  <main id="app" aria-live="polite"></main>
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <p id="confirm-text"></p>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button value="ok" autofocus>OK</button>
+      </menu>
+    </form>
+  </dialog>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

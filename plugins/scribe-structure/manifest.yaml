@@ -1,0 +1,35 @@
+manifest_spec: ductile.plugin
+manifest_version: 1
+name: scribe-structure
+version: 0.1.0
+protocol: 2
+entrypoint: run.py
+description: "Call Claude API (or stub) with the assembled_context + template prompt; validate the response against the template's JSON schema; emit scribe.session.structured.v1."
+concurrency_safe: true
+commands:
+  - name: handle
+    type: write
+    idempotent: true
+    retry_safe: true
+    values:
+      consume:
+        - payload.session_id
+        - payload.template_id
+        - payload.assembled_context
+      emit:
+        - event: scribe.session.structured.v1
+          values:
+            - payload.session_id
+            - payload.structured
+        - event: scribe.session.failed.v1
+          values:
+            - payload.session_id
+            - payload.stage
+            - payload.reason
+  - name: health
+    type: read
+    idempotent: true
+    retry_safe: true
+config_keys:
+  required: [ingress_url, templates_dir]
+  optional: [anthropic_api_key, claude_model, request_timeout_seconds, stub_mode]
