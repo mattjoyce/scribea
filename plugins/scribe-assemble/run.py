@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _scribe_common import (  # noqa: E402
@@ -23,7 +24,50 @@ from _scribe_common import (  # noqa: E402
 )
 
 WORKER = "scribe-assemble"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
+
+
+def _clip_ready(c: dict) -> bool:
+    """A clip is ready for assembly when its per-clip pipeline has reached a
+    terminal state: 'failed' (becomes a gap), or 'transcribed' with the
+    redacted_transcript_ref stamped (so we can read the canonical blob)."""
+    state = c.get("state")
+    if state == "failed":
+        return True
+    if state == "transcribed" and c.get("redacted_transcript_ref"):
+        return True
+    return False
+
+
+def wait_for_clips(ingress_url: str, session_id: str, *,
+                   max_wait_s: float = 30.0,
+                   poll_interval_s: float = 0.25) -> tuple[dict, int, bool]:
+    """Poll /sessions/{id} until every clip is terminal-ready, or budget hits.
+
+    The race we're closing: assemble fires on scribe.session.close_requested.v1
+    immediately, but the per-clip pipeline (preprocess → transcribe → ner →
+    redact) for already-uploaded clips is still in flight. Without waiting,
+    assemble would write gap markers for every clip and structure would see a
+    useless context.
+
+    The wait is bounded so a stuck transcribe doesn't pin a Ductile worker
+    forever — past the deadline we assemble with whatever's done, marking
+    the rest as gaps (the same path that already handles permanent failures).
+
+    Returns (final_session_view, elapsed_ms, timed_out).
+    """
+    start = time.perf_counter()
+    deadline = start + max_wait_s
+    view = ingress_get(ingress_url, f"/sessions/{session_id}")
+    while True:
+        clips = view.get("clips") or []
+        # Empty session: nothing to wait for; let assemble note 0 clips.
+        if not clips or all(_clip_ready(c) for c in clips):
+            return view, int((time.perf_counter() - start) * 1000), False
+        if time.perf_counter() >= deadline:
+            return view, int((time.perf_counter() - start) * 1000), True
+        time.sleep(poll_interval_s)
+        view = ingress_get(ingress_url, f"/sessions/{session_id}")
 
 
 def _format_mmss(ms: int) -> str:
@@ -133,6 +177,13 @@ def main() -> None:
               or "redacted").lower()
     if source not in ("redacted", "original"):
         source = "redacted"
+    # Per-clip-readiness wait budget — tunable so tests/replays can shorten it.
+    max_wait_s = float(cfg.get("max_wait_for_clips_seconds")
+                       or os.environ.get("ASSEMBLE_MAX_WAIT_SECONDS")
+                       or 30.0)
+    poll_interval_s = float(cfg.get("poll_interval_seconds")
+                            or os.environ.get("ASSEMBLE_POLL_INTERVAL_SECONDS")
+                            or 0.25)
 
     payload = (req.get("event") or {}).get("payload") or {}
     session_id = payload.get("session_id")
@@ -143,11 +194,15 @@ def main() -> None:
 
     sw = Stopwatch()
     try:
-        session_view = ingress_get(ingress_url, f"/sessions/{session_id}")
+        session_view, wait_ms, wait_timed_out = wait_for_clips(
+            ingress_url, session_id,
+            max_wait_s=max_wait_s, poll_interval_s=poll_interval_s,
+        )
     except Exception as e:  # noqa: BLE001
         write_response(err(f"ingress GET failed: {e}", retry=True))
         return
-    sw.mark("ingress_get_ms")
+    sw.phases["wait_for_clips_ms"] = wait_ms
+    sw.last = time.perf_counter()
 
     session = session_view.get("session") or {}
     clips = sorted(session_view.get("clips") or [], key=lambda c: c.get("seq", 0))
@@ -169,7 +224,8 @@ def main() -> None:
                 extra={"clip_count": len(clips), "gap_count": len(gaps),
                        "template_id": template_id,
                        "transcript_source": effective_source,
-                       "transcript_source_requested": source},
+                       "transcript_source_requested": source,
+                       "wait_timed_out": wait_timed_out},
             ),
         })
     except Exception as e:  # noqa: BLE001
