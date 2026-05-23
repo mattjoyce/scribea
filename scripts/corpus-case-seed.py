@@ -173,8 +173,20 @@ CODE_STATUS: list[tuple[str, float]] = [
 
 ROLES: list[str] = ["vmo", "registrar"]
 ROLE_TO_STYLE: dict[str, str] = {"vmo": "systems", "registrar": "checklist"}
-ROLE_TO_VOICE: dict[str, str] = {"vmo": "ballad", "registrar": "onyx"}
 ROLE_TO_TEMPLATE: dict[str, str] = {"vmo": "icu_vmo", "registrar": "icu_registrar"}
+
+# Persona naming convention in corpus/voice-renderer/voices.json:
+#   VMO_*  → consultant voices, picked when role == "vmo"
+#   REG_*  → registrar voices, picked when role == "registrar"
+# Adding more personas to voices.json under those prefixes broadens the pool
+# automatically — no edits here required.
+ROLE_TO_PERSONA_PREFIX: dict[str, str] = {"vmo": "VMO_", "registrar": "REG_"}
+
+# Fallback raw OpenAI voice ids if voices.json is missing or has no matching
+# persona for a role. Kept so the script remains useful on a partial checkout.
+ROLE_TO_VOICE_FALLBACK: dict[str, str] = {"vmo": "ballad", "registrar": "onyx"}
+
+VOICES_PATH = Path(__file__).resolve().parent.parent / "corpus/voice-renderer/voices.json"
 
 # Short slugs for case_id construction.
 SYSTEM_SLUG: dict[str, str] = {
@@ -208,6 +220,23 @@ def keyword_for_reason(reason: str) -> str:
         if w and w not in stop and len(w) > 2:
             return w[:12]
     return slugify(reason)[:12]
+
+
+def personas_for_role(role: str) -> list[str]:
+    """Return persona keys from voices.json whose name matches the role's
+    prefix (VMO_* for vmo, REG_* for registrar). Empty list if voices.json
+    is unreadable or has no matching personas — caller falls back to the
+    raw voice id from ROLE_TO_VOICE_FALLBACK in that case.
+    """
+    prefix = ROLE_TO_PERSONA_PREFIX.get(role)
+    if not prefix:
+        return []
+    try:
+        data = json.loads(VOICES_PATH.read_text())
+    except (OSError, ValueError):
+        return []
+    voices = data.get("voices") or {}
+    return sorted(k for k in voices.keys() if k.startswith(prefix))
 
 
 # ---------------------------------------------------------------------------
@@ -251,12 +280,18 @@ def roll_case(rng: random.Random, role_hint: str | None = None) -> dict[str, Any
     reason_kw = keyword_for_reason(admission_reason)
     case_slug = f"{sys_slug}_{reason_kw}_{role}"
 
+    # Pick a persona at the end of the roll so adding this draw doesn't shift
+    # the rng state used for the demographics/clinical fields above — existing
+    # seeds produce the same patient with a randomised voice.
+    role_personas = personas_for_role(role)
+    voice_id = rng.choice(role_personas) if role_personas else ROLE_TO_VOICE_FALLBACK[role]
+
     return {
         "case_slug": case_slug,
         "role": role,
         "template_id": ROLE_TO_TEMPLATE[role],
         "dictation_style": ROLE_TO_STYLE[role],
-        "voice_id": ROLE_TO_VOICE[role],
+        "voice_id": voice_id,
         "demographics": {
             "sex": sex,
             "ethnicity": ethnicity,
