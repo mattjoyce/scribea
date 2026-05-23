@@ -1,6 +1,16 @@
 ## Blobs (content-addressed audio store)
 blobs/
 
+## Audio (policy: no audio files in git — see MEMORY: feedback_no_audio_in_git)
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.opus
+*.aac
+*.webm
+
 ## SQLite
 *.db
 *.db-wal
