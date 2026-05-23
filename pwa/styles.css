@@ -181,3 +181,101 @@ pre.json, pre.markdown {
 
 dialog { border: 1px solid #999; border-radius: 6px; padding: 16px; }
 dialog menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+
+/* Clip-card lifecycle strip — one dot per pipeline stage. */
+.stage-strip {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+.stage-dot {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+  color: #999;
+}
+.stage-dot.done { background: #e8f6e8; border-color: #4a9a4a; color: #1f5a1f; }
+.stage-dot.failed { background: #fbe8e8; border-color: #b25a5a; color: #7a1f1f; }
+
+.clip-list audio { display: block; margin-top: 6px; width: 100%; max-width: 480px; }
+.clip-detail { margin-top: 6px; font-size: 13px; }
+.clip-detail summary { cursor: pointer; color: #555; }
+
+/* NER / Redact tabs — per-clip annotated card. */
+.clip-annotated {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.toggle-row { display: flex; gap: 4px; margin: 6px 0; }
+.tab-mini {
+  font-size: 12px;
+  padding: 2px 10px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+  color: #555;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.tab-mini.active { background: #111; color: #fff; border-color: #111; }
+.annotated-text {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 6px 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.6;
+  background: #fafafa;
+}
+.span-table { font-size: 12px; }
+.span-table td { font-size: 12px; padding: 4px 8px; }
+.spans-details { margin-top: 8px; }
+.spans-details summary { cursor: pointer; color: #555; font-size: 12px; }
+
+/* PHI / NER highlight palette — broad categories so a transcript with many
+ * distinct labels stays readable. Background tint only; foreground stays
+ * default for legibility. */
+.hl {
+  border-radius: 2px;
+  padding: 0 2px;
+  border-bottom: 1px dotted #aaa;
+}
+.hl-person     { background: rgba(255, 200, 100, 0.35); border-bottom-color: #c8821a; }
+.hl-location   { background: rgba(120, 200, 255, 0.30); border-bottom-color: #1a72c8; }
+.hl-identifier { background: rgba(255, 130, 130, 0.30); border-bottom-color: #c81a1a; }
+.hl-contact    { background: rgba(200, 130, 255, 0.30); border-bottom-color: #821ac8; }
+.hl-temporal   { background: rgba(130, 230, 180, 0.35); border-bottom-color: #1ac872; }
+.hl-clinical   { background: rgba(255, 220, 90,  0.35); border-bottom-color: #b08a00; }
+.hl-other      { background: rgba(180, 180, 180, 0.30); border-bottom-color: #888; }
+
+/* Collapsible JSON tree. */
+.json-tree {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+.json-node > summary {
+  cursor: pointer;
+  color: #555;
+  list-style: revert;
+}
+.json-children { margin-left: 14px; border-left: 1px dotted #ddd; padding-left: 8px; }
+.json-line { padding: 1px 0; }
+.json-key { color: #555; }
+.json-string { color: #2a4480; }
+.json-number { color: #6a3a00; }
+.json-boolean { color: #1f5a1f; font-weight: 600; }
+.json-null { color: #999; font-style: italic; }
+
+.note-rendered { line-height: 1.55; }
+.note-rendered h1, .note-rendered h2, .note-rendered h3 { margin-top: 16px; }

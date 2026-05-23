@@ -157,3 +157,102 @@ export function confirmDialog(text) {
     dlg.showModal();
   });
 }
+
+// jsonTree renders a value as a collapsible <details>-based tree. openDepth
+// controls how deep the tree opens by default (1 = root expanded, children
+// collapsed).
+export function jsonTree(value, opts = {}) {
+  const openDepth = opts.openDepth ?? 1;
+  const root = el("div", { class: "json-tree" });
+  root.append(renderJsonNode(value, "", 0, openDepth));
+  return root;
+}
+
+function renderJsonNode(v, key, depth, openDepth) {
+  if (v === null || v === undefined) return jsonScalarLine(key, "null", "json-null");
+  const t = typeof v;
+  if (t === "string") return jsonScalarLine(key, JSON.stringify(v), "json-string");
+  if (t === "number") return jsonScalarLine(key, String(v), "json-number");
+  if (t === "boolean") return jsonScalarLine(key, String(v), "json-boolean");
+  if (Array.isArray(v)) {
+    const head = key ? `${key}: ` : "";
+    const summary = `${head}Array(${v.length})`;
+    const node = el("details", { class: "json-node" });
+    if (depth < openDepth) node.setAttribute("open", "");
+    node.append(el("summary", { text: summary }));
+    const body = el("div", { class: "json-children" });
+    for (let i = 0; i < v.length; i++) body.append(renderJsonNode(v[i], `[${i}]`, depth + 1, openDepth));
+    node.append(body);
+    return node;
+  }
+  if (t === "object") {
+    const keys = Object.keys(v);
+    const head = key ? `${key}: ` : "";
+    const summary = `${head}{${keys.length}}`;
+    const node = el("details", { class: "json-node" });
+    if (depth < openDepth) node.setAttribute("open", "");
+    node.append(el("summary", { text: summary }));
+    const body = el("div", { class: "json-children" });
+    for (const k of keys) body.append(renderJsonNode(v[k], k, depth + 1, openDepth));
+    node.append(body);
+    return node;
+  }
+  return jsonScalarLine(key, String(v), "json-other");
+}
+
+function jsonScalarLine(key, valStr, cls) {
+  const line = el("div", { class: "json-line" });
+  if (key) line.append(el("span", { class: "json-key", text: `${key}: ` }));
+  line.append(el("span", { class: cls, text: valStr }));
+  return line;
+}
+
+// PHI / clinical label → broad category for the highlight palette. Keeps the
+// colour count small (6 + other) so a transcript with many distinct labels
+// stays readable. Unknown labels fall back to "other".
+const PHI_CATEGORY_MAP = {
+  person:     ["first_name", "last_name", "name", "patient", "doctor", "person", "clinician"],
+  location:   ["city", "state", "zip_code", "address", "street_address", "country", "hospital", "ward", "location", "facility"],
+  identifier: ["id_number", "mrn", "ssn", "account", "license", "case_number"],
+  contact:    ["phone_number", "email", "url", "fax"],
+  temporal:   ["date", "age", "time", "datetime", "dob"],
+  clinical:   ["medication", "condition", "procedure", "anatomy", "dosage", "drug", "diagnosis", "symptom", "device"],
+};
+
+export function phiCategory(label) {
+  if (!label) return "other";
+  const l = String(label).toLowerCase();
+  for (const [cat, labels] of Object.entries(PHI_CATEGORY_MAP)) {
+    if (labels.includes(l)) return cat;
+  }
+  return "other";
+}
+
+// highlightSpans wraps `text` such that any (start, end) span gets a coloured
+// background. Returns a DocumentFragment. Overlapping spans: first wins, later
+// overlapping spans are dropped (no double-wrapping). Spans without a valid
+// (start, end) pair are skipped.
+export function highlightSpans(text, spans) {
+  const frag = document.createDocumentFragment();
+  if (!text) return frag;
+  const sorted = (spans || [])
+    .filter((s) => s && Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  let cursor = 0;
+  for (const s of sorted) {
+    if (s.start < cursor) continue;
+    if (s.start > cursor) frag.append(document.createTextNode(text.slice(cursor, s.start)));
+    const label = s.label || s.entity_type || "";
+    const cat = phiCategory(label);
+    const scorePart = typeof s.score === "number" ? ` (${(s.score * 100).toFixed(1)}%)` : "";
+    frag.append(el("span", {
+      class: `hl hl-${cat}`,
+      title: `${label}${scorePart}`,
+      text: text.slice(s.start, s.end),
+    }));
+    cursor = s.end;
+  }
+  if (cursor < text.length) frag.append(document.createTextNode(text.slice(cursor)));
+  return frag;
+}

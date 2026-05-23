@@ -78,4 +78,7 @@ export const api = {
   getNote: (id) => jsonFetch(`/sessions/${encodeURIComponent(id)}/note`),
 
   getBaggage: (id) => jsonFetch(`/sessions/${encodeURIComponent(id)}/baggage`),
+
+  clipAudioUrl: (sessionId, clipId) =>
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/clips/${encodeURIComponent(clipId)}/audio`,
 };

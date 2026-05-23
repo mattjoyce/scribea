@@ -1,7 +1,7 @@
 // Service worker: cache app-shell + /templates; network-first for /sessions/*.
 // Spec §9.3.
 
-const CACHE = "scribe-shell-v1";
+const CACHE = "scribe-shell-v2";
 const SHELL = [
   "/",
   "/index.html",
