@@ -1,0 +1,9 @@
+{
+  "template_id": "icu_vmo",
+  "version": "0.1.0",
+  "name": "ICU VMO — Systems Approach",
+  "description": "ICU consultant dictation, structured as a systems-by-system review (Neuro, CVS, Resp, Renal, GI, Heme-ID, Endo, Skin, Lines, Plan). See docs/icu-notes-two-approaches.md for the dictation style.",
+  "prompt_id": "icu_vmo_v1",
+  "prompt_version": "0.1.0",
+  "timeout_minutes": 15
+}

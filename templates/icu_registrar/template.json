@@ -1,0 +1,9 @@
+{
+  "template_id": "icu_registrar",
+  "version": "0.1.0",
+  "name": "ICU Registrar — Checklist Approach (FAST HUGS BID)",
+  "description": "ICU registrar handover dictation, structured as a FAST HUGS BID checklist (Feeding, Analgesia, Sedation, Thromboprophylaxis, Head-of-bed, Ulcer prophylaxis, Glucose, SBT, Bowels, Indwelling devices, De-escalation). See docs/icu-notes-two-approaches.md for the dictation style.",
+  "prompt_id": "icu_registrar_v1",
+  "prompt_version": "0.1.0",
+  "timeout_minutes": 15
+}

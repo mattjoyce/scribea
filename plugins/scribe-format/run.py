@@ -162,6 +162,11 @@ def main() -> None:
         "gaps": gaps_count,
         "model": payload.get("model") or "",
         "prompt_version": payload.get("prompt_version") or template_meta.get("prompt_version", ""),
+        # Expose the full structured dict so any template can reference its
+        # own fields via `{{ structured.<field> }}`. The four SOAP-specific
+        # top-level keys below are kept for backwards compatibility with
+        # the soap_consult/render.tmpl shape.
+        "structured": structured,
         "subjective": structured.get("subjective", ""),
         "objective": structured.get("objective", ""),
         "assessment": structured.get("assessment", ""),

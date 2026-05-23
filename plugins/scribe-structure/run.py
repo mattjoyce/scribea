@@ -99,15 +99,40 @@ def validate_against_schema(obj: dict, schema: dict) -> str | None:
     return None
 
 
-def stub_structured(template_id: str) -> dict:
-    """A schema-valid placeholder for the soap_consult template. Honest about
-    its origin via the surrounding baggage."""
-    return {
-        "subjective": "(stub) No LLM key configured — assembled transcript was not analysed.",
-        "objective": "(stub) No objective findings extracted.",
-        "assessment": "(stub) Awaiting real LLM wiring; see ADR-0001.",
-        "plan": ["Configure ANTHROPIC_API_KEY in scribe-structure plugin config."],
-    }
+def stub_from_schema(schema: dict, field_hint: str = "") -> object:
+    """Generate a minimal schema-valid placeholder from a JSON Schema.
+
+    Walks the schema and produces a value of the right type for each
+    required field. Strings get a stub sentence; arrays get a one-item
+    stub list; nested objects recurse. Honest about its origin — the
+    surrounding baggage will carry `meta.stub: true` so the audit log
+    never lies about what produced the output.
+    """
+    t = schema.get("type")
+    if t == "object":
+        out: dict[str, object] = {}
+        for key in schema.get("required", []) or []:
+            sub = (schema.get("properties") or {}).get(key) or {}
+            out[key] = stub_from_schema(sub, field_hint=key)
+        return out
+    if t == "string":
+        msg = "(stub) No LLM key configured"
+        return f"{msg} — {field_hint} not extracted." if field_hint else f"{msg}."
+    if t == "array":
+        items_schema = schema.get("items") or {}
+        return [stub_from_schema(items_schema, field_hint=field_hint)]
+    if t == "number" or t == "integer":
+        return 0
+    if t == "boolean":
+        return False
+    return None
+
+
+def stub_structured(schema: dict) -> dict:
+    """A schema-valid placeholder for *any* template. The audit trail
+    (meta.stub = True) is what tells consumers this came from the stub."""
+    result = stub_from_schema(schema)
+    return result if isinstance(result, dict) else {}
 
 
 def call_claude(api_key: str, model: str, system_prompt: str,
@@ -218,7 +243,7 @@ def main() -> None:
     notes: list[str] = []
 
     if stub_mode or not anthropic_key:
-        structured = stub_structured(template_id)
+        structured = stub_structured(schema)
         notes.append("LLM not configured — using stub structured output")
     else:
         try:

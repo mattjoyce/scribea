@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scribea:icu_vmo/0.1.0",
+  "title": "ICU VMO Systems Approach note",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["neuro", "cvs", "resp", "renal", "gi", "heme_id", "endo", "skin", "lines", "plan"],
+  "properties": {
+    "neuro":   { "type": "string", "minLength": 1, "description": "Sedation, neurology, pain, plan to lighten/wean." },
+    "cvs":     { "type": "string", "minLength": 1, "description": "Vasopressors, MAP, lactate, rhythm, trajectory." },
+    "resp":    { "type": "string", "minLength": 1, "description": "Vent mode + settings, FiO2, PEEP, P/F, secretions, SBT plan." },
+    "renal":   { "type": "string", "minLength": 1, "description": "Urine output, creatinine, urea, K+, RRT triggers." },
+    "gi":      { "type": "string", "minLength": 1, "description": "Feeding (route, rate, tolerance), bowels, abdomen." },
+    "heme_id": { "type": "string", "minLength": 1, "description": "Hb and trend, antibiotics + day, cultures, source control." },
+    "endo":    { "type": "string", "minLength": 1, "description": "Glucose control, BSL range, electrolytes." },
+    "skin":    { "type": "string", "minLength": 1, "description": "Pressure areas, wounds, turning regimen." },
+    "lines":   { "type": "string", "minLength": 1, "description": "Line days in situ, review/replace plan." },
+    "plan":    { "type": "string", "minLength": 1, "description": "Integrative: dominant problem, next 24h, watch items, thresholds." }
+  }
+}
