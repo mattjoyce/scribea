@@ -10,9 +10,25 @@ blobs/
 ## Build artifacts
 /bin/
 /ingress/scribe-ingress
+/ingress/ingress
 /ingress/bin/
 /pwa/dist/
 /pwa/node_modules/
+
+## Test corpus — text + ground-truth JSON live in the repo, audio does
+## not. Per docs/scribe-test-corpus.md §9, background MP3s + rendered
+## clip WAVs live in an external pool dir (SCRIBE_CORPUS_AUDIO_DIR).
+## These patterns are defensive — they keep audio out even if a render
+## script writes it into the working tree by mistake.
+corpus/**/*.mp3
+corpus/**/*.wav
+corpus/**/*.flac
+corpus/**/*.m4a
+corpus/**/*.ogg
+corpus/**/*.aiff
+corpus/**/*.aac
+corpus/**/*.inflight
+corpus/**/*.tmp
 
 ## Logs
 *.log
