@@ -245,6 +245,10 @@ All messages carry the baggage envelope (§4.4). Event types are namespaced, ver
 | `scribe.session.structured.v1`         | structure-worker   | format-worker                | `{ structured, raw_llm_response }`                            |
 | `scribe.session.completed.v1`          | format-worker      | HTTP egress, audit           | `{ markdown, structured }`                                    |
 | `scribe.session.failed.v1`             | any worker         | HTTP egress, audit           | `{ stage, reason }`                                           |
+| `scribe.clip.entities.v1`              | scribe-clinical-ner| scribe-redact, audit         | `{ entities[], extractor, stats }`                            |
+| `scribe.clip.ner_failed.v1`            | scribe-clinical-ner| audit                        | `{ reason, stage }`                                           |
+| `scribe.clip.redacted.v1`              | scribe-redact      | assemble-worker, audit       | `{ redacted_transcript_ref, original_transcript_ref, redactions[], passthrough, redactor }` |
+| `scribe.clip.redact_failed.v1`         | scribe-redact      | audit                        | `{ reason }`                                                  |
 
 The `.v1` suffix is a hard rule. When a payload shape changes, emit `.v2` and run both consumers during the transition. There are no implicit migrations.
 
@@ -272,16 +276,19 @@ CREATE TABLE sessions (
 );
 
 CREATE TABLE clips (
-  clip_id              TEXT PRIMARY KEY,
-  session_id           TEXT NOT NULL REFERENCES sessions(session_id),
-  seq                  INTEGER NOT NULL,
-  started_at           TEXT NOT NULL,
-  duration_ms          INTEGER NOT NULL,
-  audio_ref            TEXT NOT NULL,
-  state                TEXT NOT NULL,
-  transcript           TEXT,
-  transcript_segments  JSON,
-  meta                 JSON NOT NULL DEFAULT '{}',
+  clip_id                  TEXT PRIMARY KEY,
+  session_id               TEXT NOT NULL REFERENCES sessions(session_id),
+  seq                      INTEGER NOT NULL,
+  started_at               TEXT NOT NULL,
+  duration_ms              INTEGER NOT NULL,
+  audio_ref                TEXT NOT NULL,
+  state                    TEXT NOT NULL,
+  transcript               TEXT,                  -- original STT output; always canonical
+  transcript_segments      JSON,
+  entities                 JSON,                  -- scribe-clinical-ner projection; NULL = not run, [] = ran, found none
+  redacted_transcript_ref  TEXT,                  -- scribe-redact projection; sha256: of redacted blob (== original in passthrough)
+  redactions               JSON,                  -- scribe-redact projection; [] in passthrough, populated in active mode
+  meta                     JSON NOT NULL DEFAULT '{}',
   UNIQUE (session_id, seq)
 );
 
@@ -412,8 +419,9 @@ Each worker is a separate Go binary (or Ductile-managed handler). It subscribes 
   - Session metadata header (template, total duration, clip count, gaps).
   - Ordered transcript with `[clip N, mm:ss]` markers so the LLM can cite.
   - (Entity index, speaker turns: not in v0.)
+- Transcript source: by default reads `clips.redacted_transcript_ref` (the blob written by scribe-redact, which is byte-identical to the original in v0 passthrough mode). The env var `ASSEMBLE_TRANSCRIPT_SOURCE=original` switches back to reading `clips.transcript` directly. The chosen source is stamped into the assembled event payload as `transcript_source` so the audit trail records which version the LLM saw. See `docs/scribe-ner-redact.md` §3.1.
 - Emits `scribe.session.assembled.v1`.
-- Idempotency: pure function of clips + template_id. Re-running yields the same `assembled_context`.
+- Idempotency: pure function of clips + template_id + transcript_source. Re-running yields the same `assembled_context`.
 
 ### 11.3 `structure-worker`
 
@@ -428,6 +436,23 @@ Each worker is a separate Go binary (or Ductile-managed handler). It subscribes 
 - Renders the structured JSON to markdown using the template's `render.tmpl` (a Go text/template for v0).
 - Emits `scribe.session.completed.v1`.
 - Idempotency: pure function of input.
+
+### 11.5 `scribe-clinical-ner`
+
+- Subscribes: `scribe.clip.transcribed.v1`
+- v0 NOP: emits `scribe.clip.entities.v1` with `entities: []` and `extractor.model: "nop"`. Real extractors (scispacy, GLiNER, regex) swap inside the plugin without changing the event or projection contracts.
+- Projection: updates `clips.entities`. `NULL` → not run; `[]` → ran, found none.
+- On failure: emits `scribe.clip.ner_failed.v1`. Does not block downstream redact (see §11.6 degraded passthrough).
+- Full spec: `docs/scribe-ner-redact.md` §1.
+
+### 11.6 `scribe-redact`
+
+- Subscribes: `scribe.clip.entities.v1`
+- v0 passthrough: writes the original transcript to the blob store at `sha256(transcript)` (idempotent via CAS), emits `scribe.clip.redacted.v1` with `redacted_transcript_ref == original_transcript_ref` and `passthrough: true`.
+- Projection: updates `clips.redacted_transcript_ref` and `clips.redactions` (`[]` in passthrough). `clips.transcript` is never modified — original remains canonical per §0 rule 2 of the NER/redact spec.
+- Degraded path: if entities are missing (NER failed), runs in passthrough anyway with `redactor.warnings: ["ner_unavailable"]`. The pipeline never stalls on a missing entity event.
+- Active redaction (post-v0) writes a new blob, emits a different `redacted_transcript_ref`, and populates `redactions[]` with `{entity_type, original_text, replacement_text, start, end, source_entity_index}`.
+- Full spec: `docs/scribe-ner-redact.md` §2.
 
 ---
 
@@ -470,9 +495,9 @@ The architecture earns its keep if all of these are pure additions, not rewrites
 
 | Future capability                | Lands as                                              | Bus event(s)                                                     |
 |----------------------------------|-------------------------------------------------------|------------------------------------------------------------------|
-| Per-clip NER                     | new clip-pipeline worker after transcribe             | consumes `clip.transcribed`, emits `clip.enriched.v1`            |
+| Real NER extractor               | swap inner logic of `scribe-clinical-ner` (NOP'd in v0) | unchanged event/projection contracts; `extractor.model` flips from `nop` to real |
+| Active redaction                 | swap `scribe-redact` from passthrough to active mode | unchanged event shape; `redactions[]` populated, `passthrough: false` |
 | Per-clip diarization             | another clip-pipeline worker                          | consumes `clip.transcribed`, emits `clip.diarized.v1`            |
-| PHI redaction                    | clip-pipeline worker                                  | consumes `clip.transcribed`, emits `clip.redacted.v1`            |
 | SNOMED-CT-AU normalization       | session-pipeline stage between assemble and structure | consumes `session.assembled`, emits `session.normalized.v1`      |
 | Hallucination scoring            | session-pipeline scorer after structure               | consumes `session.structured`, emits `session.scored.v1`         |
 | Multi-scorer + veto fusion       | per the email-ingestion pattern in Ductile            | scorers emit, fusion worker decides                              |
@@ -493,11 +518,13 @@ Smallest possible end-to-end:
 2. PWA with the four screens, IndexedDB outbox, no service worker yet.
 3. `ingress` HTTP server with all endpoints in §8, persists events, fires bus messages.
 4. `transcribe-worker` shelling out to faster-whisper CLI.
-5. `assemble-worker` doing concatenation + markers.
-6. `structure-worker` calling Claude API with template prompt, validating against schema.
-7. `format-worker` running Go template.
-8. SQLite with the schema in §7.
-9. Manual end-to-end: record a 3-clip mock consult, watch it land in the open-session debug view.
+5. `scribe-clinical-ner` running in NOP mode (empty entities, full envelope) — doesn't gate the demo.
+6. `scribe-redact` running in passthrough mode (materialises transcript blob, refs equal) — doesn't gate the demo.
+7. `assemble-worker` doing concatenation + markers, reading via `redacted_transcript_ref` by default.
+8. `structure-worker` calling Claude API with template prompt, validating against schema.
+9. `format-worker` running Go template.
+10. SQLite with the schema in §7 (including the NER/redact projection columns from migration `002_ner_redact.sql`).
+11. Manual end-to-end: record a 3-clip mock consult, watch it land in the open-session debug view.
 
 When this works, the rest of the spec is mostly about not breaking what already works.
 

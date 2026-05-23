@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const expectedSchemaVersion = 1
+const expectedSchemaVersion = 2
 
 // Schema is owned by db/migrations/. Ingress refuses to start if the DB hasn't
 // been migrated to the version it understands — this is the deploy-gate pattern.
@@ -35,16 +35,19 @@ type sessionRow struct {
 }
 
 type clipRow struct {
-	ClipID             string          `json:"clip_id"`
-	SessionID          string          `json:"session_id"`
-	Seq                int             `json:"seq"`
-	StartedAt          string          `json:"started_at"`
-	DurationMs         int64           `json:"duration_ms"`
-	AudioRef           string          `json:"audio_ref"`
-	State              string          `json:"state"`
-	Transcript         *string         `json:"transcript,omitempty"`
-	TranscriptSegments json.RawMessage `json:"transcript_segments,omitempty"`
-	Meta               json.RawMessage `json:"meta"`
+	ClipID                string          `json:"clip_id"`
+	SessionID             string          `json:"session_id"`
+	Seq                   int             `json:"seq"`
+	StartedAt             string          `json:"started_at"`
+	DurationMs            int64           `json:"duration_ms"`
+	AudioRef              string          `json:"audio_ref"`
+	State                 string          `json:"state"`
+	Transcript            *string         `json:"transcript,omitempty"`
+	TranscriptSegments    json.RawMessage `json:"transcript_segments,omitempty"`
+	Entities              json.RawMessage `json:"entities,omitempty"`
+	RedactedTranscriptRef *string         `json:"redacted_transcript_ref,omitempty"`
+	Redactions            json.RawMessage `json:"redactions,omitempty"`
+	Meta                  json.RawMessage `json:"meta"`
 }
 
 type eventRow struct {
@@ -172,7 +175,8 @@ func (s *server) insertClip(row clipRow) error {
 
 func (s *server) listClips(sessionID string) ([]clipRow, error) {
 	rows, err := s.db.Query(
-		`SELECT clip_id, session_id, seq, started_at, duration_ms, audio_ref, state, transcript, transcript_segments, meta
+		`SELECT clip_id, session_id, seq, started_at, duration_ms, audio_ref, state,
+		        transcript, transcript_segments, entities, redacted_transcript_ref, redactions, meta
 		 FROM clips WHERE session_id=? ORDER BY seq ASC`, sessionID,
 	)
 	if err != nil {
@@ -182,13 +186,22 @@ func (s *server) listClips(sessionID string) ([]clipRow, error) {
 	out := []clipRow{}
 	for rows.Next() {
 		var r clipRow
-		var seg sql.NullString
+		var seg, ents, reds sql.NullString
 		var meta string
-		if err := rows.Scan(&r.ClipID, &r.SessionID, &r.Seq, &r.StartedAt, &r.DurationMs, &r.AudioRef, &r.State, &r.Transcript, &seg, &meta); err != nil {
+		if err := rows.Scan(
+			&r.ClipID, &r.SessionID, &r.Seq, &r.StartedAt, &r.DurationMs, &r.AudioRef, &r.State,
+			&r.Transcript, &seg, &ents, &r.RedactedTranscriptRef, &reds, &meta,
+		); err != nil {
 			return nil, err
 		}
 		if seg.Valid {
 			r.TranscriptSegments = json.RawMessage(seg.String)
+		}
+		if ents.Valid {
+			r.Entities = json.RawMessage(ents.String)
+		}
+		if reds.Valid {
+			r.Redactions = json.RawMessage(reds.String)
 		}
 		r.Meta = json.RawMessage(meta)
 		out = append(out, r)
@@ -198,13 +211,17 @@ func (s *server) listClips(sessionID string) ([]clipRow, error) {
 
 func (s *server) getClip(clipID string) (*clipRow, error) {
 	row := s.db.QueryRow(
-		`SELECT clip_id, session_id, seq, started_at, duration_ms, audio_ref, state, transcript, transcript_segments, meta
+		`SELECT clip_id, session_id, seq, started_at, duration_ms, audio_ref, state,
+		        transcript, transcript_segments, entities, redacted_transcript_ref, redactions, meta
 		 FROM clips WHERE clip_id=?`, clipID,
 	)
 	var r clipRow
-	var seg sql.NullString
+	var seg, ents, reds sql.NullString
 	var meta string
-	err := row.Scan(&r.ClipID, &r.SessionID, &r.Seq, &r.StartedAt, &r.DurationMs, &r.AudioRef, &r.State, &r.Transcript, &seg, &meta)
+	err := row.Scan(
+		&r.ClipID, &r.SessionID, &r.Seq, &r.StartedAt, &r.DurationMs, &r.AudioRef, &r.State,
+		&r.Transcript, &seg, &ents, &r.RedactedTranscriptRef, &reds, &meta,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -213,6 +230,12 @@ func (s *server) getClip(clipID string) (*clipRow, error) {
 	}
 	if seg.Valid {
 		r.TranscriptSegments = json.RawMessage(seg.String)
+	}
+	if ents.Valid {
+		r.Entities = json.RawMessage(ents.String)
+	}
+	if reds.Valid {
+		r.Redactions = json.RawMessage(reds.String)
 	}
 	r.Meta = json.RawMessage(meta)
 	return &r, nil
@@ -228,6 +251,33 @@ func (s *server) updateClipTranscribed(clipID, transcript string, segments json.
 		`UPDATE clips SET state='transcribed', transcript=?, transcript_segments=?
 		 WHERE clip_id=?`,
 		transcript, string(segments), clipID,
+	)
+	return err
+}
+
+// updateClipEntities stamps the entity list under clips.entities and stashes
+// the worker's baggage under meta.ner. Sibling meta keys (audio, preprocessing,
+// transcribe, …) are preserved by mergeClipMetaKey.
+func (s *server) updateClipEntities(clipID string, entities json.RawMessage, workerMeta json.RawMessage) error {
+	if err := s.mergeClipMetaKey(clipID, "ner", workerMeta); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(
+		`UPDATE clips SET entities=? WHERE clip_id=?`,
+		string(entities), clipID,
+	)
+	return err
+}
+
+// updateClipRedacted stamps redacted_transcript_ref + redactions and stashes
+// the worker's baggage under meta.redact.
+func (s *server) updateClipRedacted(clipID, redactedRef string, redactions json.RawMessage, workerMeta json.RawMessage) error {
+	if err := s.mergeClipMetaKey(clipID, "redact", workerMeta); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(
+		`UPDATE clips SET redacted_transcript_ref=?, redactions=? WHERE clip_id=?`,
+		redactedRef, string(redactions), clipID,
 	)
 	return err
 }

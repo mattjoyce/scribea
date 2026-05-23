@@ -36,6 +36,8 @@ func (s *server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/clips/{id}/preprocessed", s.handleInternalClipPreprocessed)
 	mux.HandleFunc("POST /internal/clips/{id}/preprocess_failed", s.handleInternalClipPreprocessFailed)
 	mux.HandleFunc("POST /internal/clips/{id}/transcribed", s.handleInternalClipTranscribed)
+	mux.HandleFunc("POST /internal/clips/{id}/entities", s.handleInternalClipEntities)
+	mux.HandleFunc("POST /internal/clips/{id}/redacted", s.handleInternalClipRedacted)
 	mux.HandleFunc("POST /internal/clips/{id}/failed", s.handleInternalClipFailed)
 	mux.HandleFunc("POST /internal/sessions/{id}/assembled", s.handleInternalAssembled)
 	mux.HandleFunc("POST /internal/sessions/{id}/structured", s.handleInternalStructured)

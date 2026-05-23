@@ -653,9 +653,115 @@ func (s *server) handleInternalClipFailed(w http.ResponseWriter, r *http.Request
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+type clipEntitiesReq struct {
+	SessionID string          `json:"session_id"`
+	Entities  json.RawMessage `json:"entities"`
+	Extractor json.RawMessage `json:"extractor"`
+	Stats     json.RawMessage `json:"stats"`
+	Meta      json.RawMessage `json:"meta"`
+}
+
+func (s *server) handleInternalClipEntities(w http.ResponseWriter, r *http.Request) {
+	clipID := r.PathValue("id")
+	var req clipEntitiesReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	// entities defaults to [] if caller omits it (NOP case).
+	ents := req.Entities
+	if len(ents) == 0 {
+		ents = json.RawMessage("[]")
+	}
+	if err := s.updateClipEntities(clipID, ents, req.Meta); err != nil {
+		writeError(w, 500, "db_update", err.Error())
+		return
+	}
+	var entsVal any
+	_ = json.Unmarshal(ents, &entsVal)
+	var ext any
+	_ = json.Unmarshal(req.Extractor, &ext)
+	var stats any
+	_ = json.Unmarshal(req.Stats, &stats)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	dataB, _ := json.Marshal(map[string]any{
+		"clip_id":   clipID,
+		"entities":  entsVal,
+		"extractor": ext,
+		"stats":     stats,
+	})
+	if err := s.appendEvent(eventRow{
+		EventID:   uuid.NewString(),
+		EventType: "scribe.clip.entities.v1",
+		EventTime: now,
+		SessionID: req.SessionID,
+		ClipID:    &clipID,
+		Data:      dataB,
+		Meta:      req.Meta,
+	}); err != nil {
+		writeError(w, 500, "append_event", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+type clipRedactedReq struct {
+	SessionID             string          `json:"session_id"`
+	RedactedTranscriptRef string          `json:"redacted_transcript_ref"`
+	OriginalTranscriptRef string          `json:"original_transcript_ref"`
+	Redactions            json.RawMessage `json:"redactions"`
+	Passthrough           bool            `json:"passthrough"`
+	Redactor              json.RawMessage `json:"redactor"`
+	Meta                  json.RawMessage `json:"meta"`
+}
+
+func (s *server) handleInternalClipRedacted(w http.ResponseWriter, r *http.Request) {
+	clipID := r.PathValue("id")
+	var req clipRedactedReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	reds := req.Redactions
+	if len(reds) == 0 {
+		reds = json.RawMessage("[]")
+	}
+	if err := s.updateClipRedacted(clipID, req.RedactedTranscriptRef, reds, req.Meta); err != nil {
+		writeError(w, 500, "db_update", err.Error())
+		return
+	}
+	var redsVal any
+	_ = json.Unmarshal(reds, &redsVal)
+	var redactor any
+	_ = json.Unmarshal(req.Redactor, &redactor)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	dataB, _ := json.Marshal(map[string]any{
+		"clip_id":                 clipID,
+		"redacted_transcript_ref": req.RedactedTranscriptRef,
+		"original_transcript_ref": req.OriginalTranscriptRef,
+		"redactions":              redsVal,
+		"passthrough":             req.Passthrough,
+		"redactor":                redactor,
+	})
+	if err := s.appendEvent(eventRow{
+		EventID:   uuid.NewString(),
+		EventType: "scribe.clip.redacted.v1",
+		EventTime: now,
+		SessionID: req.SessionID,
+		ClipID:    &clipID,
+		Data:      dataB,
+		Meta:      req.Meta,
+	}); err != nil {
+		writeError(w, 500, "append_event", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
 type assembledReq struct {
 	AssembledContext string          `json:"assembled_context"`
 	Gaps             json.RawMessage `json:"gaps"`
+	TranscriptSource string          `json:"transcript_source,omitempty"`
 	Meta             json.RawMessage `json:"meta"`
 }
 
@@ -670,6 +776,7 @@ func (s *server) handleInternalAssembled(w http.ResponseWriter, r *http.Request)
 	dataB, _ := json.Marshal(map[string]any{
 		"assembled_context": req.AssembledContext,
 		"gaps":              json.RawMessage(req.Gaps),
+		"transcript_source": req.TranscriptSource,
 	})
 	if err := s.appendEvent(eventRow{
 		EventID:   uuid.NewString(),

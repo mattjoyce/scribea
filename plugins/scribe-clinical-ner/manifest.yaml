@@ -1,0 +1,41 @@
+manifest_spec: ductile.plugin
+manifest_version: 1
+name: scribe-clinical-ner
+version: 0.1.0
+protocol: 2
+entrypoint: run.py
+description: "Extract clinical and PHI entities from a clip transcript. v0 runs in NOP mode (empty entities, full envelope) so the redaction slot is wired without committing to an extractor. See docs/scribe-ner-redact.md §1."
+concurrency_safe: true
+commands:
+  - name: handle
+    type: write
+    description: "Extract entities from one clip's transcript; emit scribe.clip.entities.v1 and stamp clips.entities."
+    idempotent: true
+    retry_safe: true
+    values:
+      consume:
+        - payload.session_id
+        - payload.clip_id
+        - payload.transcript
+        - payload.segments
+      emit:
+        - event: scribe.clip.entities.v1
+          values:
+            - payload.session_id
+            - payload.clip_id
+            - payload.entities
+            - payload.extractor
+            - payload.stats
+        - event: scribe.clip.ner_failed.v1
+          values:
+            - payload.session_id
+            - payload.clip_id
+            - payload.reason
+            - payload.stage
+  - name: health
+    type: read
+    idempotent: true
+    retry_safe: true
+config_keys:
+  required: [ingress_url]
+  optional: [ner_mode, ner_model_path, ner_label_set, ner_device]

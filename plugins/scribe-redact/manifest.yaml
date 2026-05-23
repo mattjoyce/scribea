@@ -1,0 +1,43 @@
+manifest_spec: ductile.plugin
+manifest_version: 1
+name: scribe-redact
+version: 0.1.0
+protocol: 2
+entrypoint: run.py
+description: "Produce a redacted transcript by masking PHI entity spans. v0 runs in passthrough mode — the redacted blob is byte-identical to the original, so redacted_transcript_ref == original_transcript_ref (CAS dedupes). See docs/scribe-ner-redact.md §2."
+concurrency_safe: true
+commands:
+  - name: handle
+    type: write
+    description: "Materialise the transcript blob and emit scribe.clip.redacted.v1; in passthrough redacted == original."
+    idempotent: true
+    retry_safe: true
+    values:
+      consume:
+        - payload.session_id
+        - payload.clip_id
+        - payload.entities
+        - payload.extractor
+        - payload.stats
+      emit:
+        - event: scribe.clip.redacted.v1
+          values:
+            - payload.session_id
+            - payload.clip_id
+            - payload.redacted_transcript_ref
+            - payload.original_transcript_ref
+            - payload.redactions
+            - payload.passthrough
+            - payload.redactor
+        - event: scribe.clip.redact_failed.v1
+          values:
+            - payload.session_id
+            - payload.clip_id
+            - payload.reason
+  - name: health
+    type: read
+    idempotent: true
+    retry_safe: true
+config_keys:
+  required: [ingress_url, blobs_dir]
+  optional: [redact_mode, redact_mask_strategy, redact_phi_types]
