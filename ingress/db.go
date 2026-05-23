@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const expectedSchemaVersion = 2
+const expectedSchemaVersion = 3
 
 // Schema is owned by db/migrations/. Ingress refuses to start if the DB hasn't
 // been migrated to the version it understands — this is the deploy-gate pattern.
@@ -32,6 +32,7 @@ type sessionRow struct {
 	ClosedAt    *string         `json:"closed_at,omitempty"`
 	CloseReason *string         `json:"close_reason,omitempty"`
 	Meta        json.RawMessage `json:"meta"`
+	CaseID      *string         `json:"case_id,omitempty"` // ADR-0006: reference label, nullable
 }
 
 type clipRow struct {
@@ -64,9 +65,10 @@ type eventRow struct {
 
 func (s *server) insertSession(row sessionRow) error {
 	_, err := s.db.Exec(
-		`INSERT INTO sessions(session_id, template_id, state, started_at, closed_at, close_reason, meta)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		row.SessionID, row.TemplateID, row.State, row.StartedAt, nullable(row.ClosedAt), nullable(row.CloseReason), string(row.Meta),
+		`INSERT INTO sessions(session_id, template_id, state, started_at, closed_at, close_reason, meta, case_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		row.SessionID, row.TemplateID, row.State, row.StartedAt,
+		nullable(row.ClosedAt), nullable(row.CloseReason), string(row.Meta), nullable(row.CaseID),
 	)
 	return err
 }
@@ -82,12 +84,12 @@ func (s *server) updateSessionState(sessionID, state string, closedAt, closeReas
 
 func (s *server) getSession(sessionID string) (*sessionRow, error) {
 	row := s.db.QueryRow(
-		`SELECT session_id, template_id, state, started_at, closed_at, close_reason, meta
+		`SELECT session_id, template_id, state, started_at, closed_at, close_reason, meta, case_id
 		 FROM sessions WHERE session_id=?`, sessionID,
 	)
 	var r sessionRow
 	var meta string
-	err := row.Scan(&r.SessionID, &r.TemplateID, &r.State, &r.StartedAt, &r.ClosedAt, &r.CloseReason, &meta)
+	err := row.Scan(&r.SessionID, &r.TemplateID, &r.State, &r.StartedAt, &r.ClosedAt, &r.CloseReason, &meta, &r.CaseID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -100,7 +102,7 @@ func (s *server) getSession(sessionID string) (*sessionRow, error) {
 
 func (s *server) listSessions(limit int) ([]sessionRow, error) {
 	rows, err := s.db.Query(
-		`SELECT session_id, template_id, state, started_at, closed_at, close_reason, meta
+		`SELECT session_id, template_id, state, started_at, closed_at, close_reason, meta, case_id
 		 FROM sessions ORDER BY started_at DESC LIMIT ?`, limit,
 	)
 	if err != nil {
@@ -111,7 +113,7 @@ func (s *server) listSessions(limit int) ([]sessionRow, error) {
 	for rows.Next() {
 		var r sessionRow
 		var meta string
-		if err := rows.Scan(&r.SessionID, &r.TemplateID, &r.State, &r.StartedAt, &r.ClosedAt, &r.CloseReason, &meta); err != nil {
+		if err := rows.Scan(&r.SessionID, &r.TemplateID, &r.State, &r.StartedAt, &r.ClosedAt, &r.CloseReason, &meta, &r.CaseID); err != nil {
 			return nil, err
 		}
 		r.Meta = json.RawMessage(meta)
@@ -137,7 +139,7 @@ func (s *server) findIdleSessions(states []string, cutoff time.Time) ([]sessionR
 	}
 	args = append(args, cutoff.UTC().Format(time.RFC3339Nano))
 	q := fmt.Sprintf(
-		`SELECT s.session_id, s.template_id, s.state, s.started_at, s.closed_at, s.close_reason, s.meta
+		`SELECT s.session_id, s.template_id, s.state, s.started_at, s.closed_at, s.close_reason, s.meta, s.case_id
 		 FROM sessions s
 		 WHERE s.state IN (%s)
 		 AND COALESCE((SELECT MAX(event_time) FROM events WHERE session_id=s.session_id), s.started_at) < ?`,
@@ -152,7 +154,7 @@ func (s *server) findIdleSessions(states []string, cutoff time.Time) ([]sessionR
 	for rows.Next() {
 		var r sessionRow
 		var meta string
-		if err := rows.Scan(&r.SessionID, &r.TemplateID, &r.State, &r.StartedAt, &r.ClosedAt, &r.CloseReason, &meta); err != nil {
+		if err := rows.Scan(&r.SessionID, &r.TemplateID, &r.State, &r.StartedAt, &r.ClosedAt, &r.CloseReason, &meta, &r.CaseID); err != nil {
 			return nil, err
 		}
 		r.Meta = json.RawMessage(meta)

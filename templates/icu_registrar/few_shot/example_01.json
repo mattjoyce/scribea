@@ -1,0 +1,17 @@
+{
+  "_comment": "Illustrative few-shot anchored on docs/icu-notes-two-approaches.md. Input is the full pre-LLM context (EMR Backstory + Dictation transcript). Output is the structured FAST HUGS BID note. Used to anchor format, not to memorise content.",
+  "input": "EMR Backstory\n=============\nDemographics: Mrs Wilson, 68F, ICU day 3\nAdmission reason: Community-acquired pneumonia, septic shock\n\nPrevious notes:\nAdmitted overnight via ED. CAP with septic shock. Intubated for hypoxic respiratory failure on arrival to ICU. Noradrenaline started on D1, weaning since. Cefepime + azithromycin commenced. CXR with bilateral basal consolidation. Cultures: blood grew Strep pneumoniae, awaiting tracheal. ICU day 3 today.\n\nDictation transcript\n====================\n[clip 1, 00:00]\nFeeding — NG feeds, 30 mils per hour, tolerating.\nAnalgesia — fentanyl infusion at 50 mcg per hour.\nSedation — propofol, RASS minus 2.\nThromboprophylaxis — held today, AKI and bleeding risk reviewed.\n\n[clip 2, 00:00]\nHead of bed at 30 degrees.\nUlcer prophylaxis — pantoprazole.\nGlucose — variable-rate insulin, BSLs running 7 to 9.\n\n[clip 3, 00:00]\nSBT not today, still on pressors.\nBowels — not opened, aperient charted.\nIndwelling devices — CVC, art line, IDC, all day 3, no signs of infection.\nDe-escalation — pip-taz to benzylpenicillin per micro, day 3 antibiotics.",
+  "output": {
+    "feeding": "NG feeds, 30 mL/hr, tolerating [clip 1].",
+    "analgesia": "Fentanyl infusion at 50 mcg/hr [clip 1].",
+    "sedation": "Propofol, RASS −2 [clip 1].",
+    "thromboprophylaxis": "Held today; AKI and bleeding risk reviewed [clip 1].",
+    "head_of_bed": "30° [clip 2].",
+    "ulcer_prophylaxis": "Pantoprazole [clip 2].",
+    "glucose": "Variable-rate insulin (VRII); BSLs running 7–9 [clip 2].",
+    "sbt": "Not today — still on pressors [clip 3].",
+    "bowels": "Not opened; aperient charted [clip 3].",
+    "indwelling_devices": "CVC, arterial line and IDC all day 3 in situ; no signs of infection [clip 3].",
+    "de_escalation": "Antibiotics rationalised pip-taz → benzylpenicillin per micro; day 3 of antibiotics [clip 3]."
+  }
+}

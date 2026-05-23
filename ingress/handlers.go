@@ -49,8 +49,11 @@ func (s *server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 // ----- sessions -----
 
 type createSessionReq struct {
-	TemplateID string `json:"template_id"`
-	Meta       map[string]any `json:"meta,omitempty"`
+	TemplateID    string         `json:"template_id"`
+	CaseID        string         `json:"case_id,omitempty"`        // ADR-0006: optional reference label
+	Demographics  map[string]any `json:"demographics,omitempty"`   // simulated-EMR context, ADR-0006
+	PreviousNotes string         `json:"previous_notes,omitempty"` // simulated-EMR context, ADR-0006
+	Meta          map[string]any `json:"meta,omitempty"`
 }
 
 func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
@@ -79,11 +82,26 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ADR-0006: case_id is a reference label. The caller (corpus loader,
+	// future EMR feed) is the authoritative source for case content;
+	// scribe.db just records the label on the session and snapshots any
+	// provided context into the events log at attachment time.
+	hasContext := len(req.Demographics) > 0 || req.PreviousNotes != ""
+	if hasContext && req.CaseID == "" {
+		writeError(w, 400, "missing_case_id", "demographics/previous_notes require a case_id")
+		return
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	sessionID := uuid.NewString()
 	metaB, _ := json.Marshal(req.Meta)
 	if string(metaB) == "null" {
 		metaB = []byte(`{}`)
+	}
+	var caseIDPtr *string
+	if req.CaseID != "" {
+		c := req.CaseID
+		caseIDPtr = &c
 	}
 	if err := s.insertSession(sessionRow{
 		SessionID:  sessionID,
@@ -91,31 +109,65 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		State:      "open",
 		StartedAt:  now,
 		Meta:       metaB,
+		CaseID:     caseIDPtr,
 	}); err != nil {
 		writeError(w, 500, "db_insert", err.Error())
 		return
 	}
 
-	eventID := uuid.NewString()
-	dataB, _ := json.Marshal(map[string]any{"template_id": req.TemplateID})
+	createdData := map[string]any{"template_id": req.TemplateID}
+	if req.CaseID != "" {
+		createdData["case_id"] = req.CaseID
+	}
+	createdDataB, _ := json.Marshal(createdData)
 	if err := s.appendEvent(eventRow{
-		EventID:   eventID,
+		EventID:   uuid.NewString(),
 		EventType: "scribe.session.created.v1",
 		EventTime: now,
 		SessionID: sessionID,
-		Data:      dataB,
+		Data:      createdDataB,
 		Meta:      ingressMeta("session_created"),
 	}); err != nil {
 		writeError(w, 500, "append_event", err.Error())
 		return
 	}
 
-	resp, _ := json.Marshal(map[string]any{
+	// Stamp the EMR-context-attached event so the audit trail honestly
+	// records what the LLM will see (ADR-0006). The structure-worker reads
+	// this event from the log to assemble the prompt context.
+	if hasContext {
+		demoB, _ := json.Marshal(req.Demographics)
+		if string(demoB) == "null" {
+			demoB = []byte(`{}`)
+		}
+		ctxData, _ := json.Marshal(map[string]any{
+			"case_id":        req.CaseID,
+			"demographics":   json.RawMessage(demoB),
+			"previous_notes": req.PreviousNotes,
+		})
+		if err := s.appendEvent(eventRow{
+			EventID:   uuid.NewString(),
+			EventType: "scribe.case.context_attached.v1",
+			EventTime: now,
+			SessionID: sessionID,
+			Data:      ctxData,
+			Meta:      ingressMeta("case_context_attached"),
+		}); err != nil {
+			writeError(w, 500, "append_event_ctx", err.Error())
+			return
+		}
+	}
+
+	respMap := map[string]any{
 		"session_id":  sessionID,
 		"template_id": req.TemplateID,
 		"state":       "open",
 		"started_at":  now,
-	})
+	}
+	if req.CaseID != "" {
+		respMap["case_id"] = req.CaseID
+	}
+	resp, _ := json.Marshal(respMap)
 	_ = s.idempotencyPut(idemKey, resp)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)

@@ -1,358 +1,571 @@
-# scribe-test-corpus — synthetic ICU spoken-audio dataset
+# Test Corpus — scribea
 
 **Status:** Draft v0
-**Parent:** [`specseed.md`](./specseed.md), [`scribe-ner-redact.md`](./scribe-ner-redact.md)
-**Scope:** Spec for a small, hand-authored, ground-truthed audio corpus that drives NER, PII, and end-to-end scribe testing without depending on real patient recordings.
+**Date:** May 2026
+**Purpose:** Specification for the fixture corpus that drives the scribea
+pipeline end-to-end against role-styled ICU dictation.
+
+Read alongside [`specseed.md`](specseed.md), the [domain glossary](../CONTEXT.md),
+and [`adr/0006-case-as-domain-entity.md`](adr/0006-case-as-domain-entity.md).
 
 ---
 
-## 1. Why
+## 1. What this is
 
-Two analysers are landing in parallel: a real `scribe-clinical-ner` extractor (replacing the v0 NOP) and a separate `pii-detector` plugin. Both need test inputs where the right answers are *known by construction*, not inferred. Today we don't have that:
+A collection of mock ICU clinical cases used to drive the scribea pipeline
+end-to-end while it is being built. Each case is a *recipe*:
 
-- macOS `say` clips are short, too clean, single-monotone, vocabulary-thin, contain no PHI, and produce neither realistic clinical phrasing nor multi-round dynamics.
-- Real patient recordings are off-limits without an ethics framework that doesn't exist yet.
-- Without a corpus with ground truth, **every quality claim about NER or PII detection becomes anecdotal.** Recall and precision aren't computable. Regressions aren't detectable. Cross-model comparisons (GLiNER vs scispacy vs regex) become arguments instead of measurements.
+- A patient's **EMR Backstory** (demographics + a free-text "previous notes"
+  block) — see [`CONTEXT.md`](../CONTEXT.md).
+- One **Session** of dictated audio by one clinician in one **Role**.
+- The dictation scripts that drive a TTS engine to produce the audio.
+- The configuration that drives audio rendering (voice, background ambience,
+  signal-to-noise level, seed for reproducibility).
 
-A small, hand-authored, deliberately-seeded corpus closes that gap. It is the testing substrate for:
+The corpus exists so the pipeline always has realistic-shaped inputs to chew
+on. It is **not** yet a regression net — that needs goldens, which are §13
+deferred work.
 
-- **NER quality** — per-type recall/precision against ground-truth entity spans
-- **PII coverage** — every uttered PHI element is in the answer key, so the detector can be scored
-- **End-to-end regression** — replay the corpus through scribea after any plugin change; diff the structured output against a golden file
-- **Speaker-style robustness** — VMO-style summary speech vs Registrar-style procedural speech, on the same patient
-- **Acoustic robustness** — voice variation + ICU background noise that real consults will have
-- **Update semantics** — round-to-round changes (started a drug, escalated a dose, changed the plan) test whether the system handles clinical narrative continuity
+## 2. What this is NOT (v0)
 
-The corpus is small on purpose. The goal is *enough variety to detect breakage*, not enough data to train anything.
+- **No real PHI, no real patients, no real consent.** Every case is faux —
+  invented demographics, invented clinical content, designed to be
+  plausibly *shaped*, not actually clinical.
+- **No goldens for v0.** The output of the structure-worker is not yet
+  pinned against expected values. Adding goldens is §13.
+- **No multi-session cases for POC.** Each case has exactly one session. The
+  domain model supports multi-session per case (ADR-0006), but POC keeps it
+  1:1 to halve the moving parts.
+- **No real recordings.** Every clip is TTS-rendered via the PAI voice
+  server, then mixed with a background ambience track. Self-recorded
+  fixtures are §13.
+- **No demo / vendor-quality dataset.** This is a developer fixture set,
+  not marketing material. A separate "demo fixtures" set would be the
+  right vehicle for that, and is not part of this corpus.
 
----
+## 3. Design principles
 
-## 2. What
+These derive from specseed §3 and the project's two intellectual anchors
+(Hickey, Armstrong). Same principles, applied to a fixture set.
 
-A directory tree of **episodes**. One episode = one fabricated patient + one ICU admission. Each episode contains:
+- **The corpus stores recipes, not artifacts.** What lives in git:
+  `case.yaml` (the recipe), the dictation scripts (the input text), the
+  EMR Backstory content. What does *not* live in git: the rendered mp3
+  clips and the background ambience pool — these are derived or
+  local-cache. Symmetry with how specseed treats `blobs/`.
+- **A case is a value.** One directory, one manifest, one identity. Other
+  values (clips, backgrounds, scripts) are referenced from the manifest by
+  path. The corpus is a tree of plain data.
+- **Determinism over polish.** Audio is TTS-rendered, with seeded-random
+  background slicing. Re-renders produce the same audio (modulo OpenAI TTS
+  drift below the voice-server layer). Honest fixtures beat realistic
+  fixtures.
+- **Role styles are recognisable in the audio, not just in the
+  structuring.** The VMO and Registrar speak differently (§6). The corpus
+  contribution is exercising the pipeline against materially different
+  dictation shapes.
 
-| Artifact            | Form     | Purpose                                                                  |
-|---------------------|----------|--------------------------------------------------------------------------|
-| Intake EMR          | JSON     | Base truth — who the patient is, why they're in ICU, baseline obs/meds  |
-| 4 round dialogs     | Text     | Hand-authored speech scripts with inline ground-truth spans              |
-| 4 round audio sets  | WAV      | Rendered audio per clip (2-5 clips per round, 5-15s each, 16 kHz mono)  |
-| 4 ground-truth sidecars | JSON | Entity + PHI spans per clip, machine-readable, for scoring              |
+## 4. Corpus layout
 
-Round structure per episode (fixed for v0):
-
-1. **VMO morning round** — assessment + decisions, builds on intake
-2. **Registrar mid-day round** — actions taken, fresh observations
-3. **VMO evening round** — response to interventions, plan updates
-4. **Registrar overnight handover** — terminal-state summary, what's pending
-
-The intake document is *not spoken* — it's the simulated EMR record the rounds reference. The four rounds *are* spoken, each as an independent scribea session.
-
-**v0 targets: 3 episodes, ~3 minutes total audio.** Enough to exercise every NER type and every PII type at least twice across the corpus.
-
----
-
-## 3. Episode + round model
+The corpus lives at the repo root under `test-corpus/`:
 
 ```
-episode = {
-  intake_emr,                    # one-shot at admission
-  round_1_vmo_morning,           # 2-5 spoken clips
-  round_2_registrar_midday,      # 2-5 spoken clips
-  round_3_vmo_evening,           # 2-5 spoken clips
-  round_4_registrar_overnight,   # 2-5 spoken clips
-}
+test-corpus/
+  README.md                         # short pointer to this doc
+  backgrounds/                      # local-only — ICU ambience pool
+    icu_ward_quiet.mp3              # gitignored
+    icu_monitors_active.mp3         # gitignored
+    icu_alarm_intermittent.mp3      # gitignored
+    ATTRIBUTION.md                  # local — sources/licences for the above
+  cases/
+    01_cap_septic_shock_vmo/
+      case.yaml                     # the recipe
+      scripts/
+        01.txt
+        02.txt
+        03.txt
+      clips/                        # gitignored — rendered audio
+        01.mp3
+        02.mp3
+        03.mp3
+    02_cap_septic_shock_registrar/
+      case.yaml
+      scripts/…
+      clips/…                       # gitignored
 ```
 
-Rounds are causally linked: round 2 references decisions from round 1 ("started the noradrenaline as you suggested"); round 3 references observations from round 2 ("good response to the bolus"); round 4 references the whole day. This continuity is the realistic-narrative property that single-clip corpora can't test.
+- One directory per case.
+- Case ids: `NN_<short_slug>_<role>`. The slug captures the clinical
+  scenario for human readability; the trailing `_<role>` keeps VMO and
+  Registrar variants of the same scenario distinct.
+- To add a case: `cp -r 01_… 03_…` then edit `case.yaml` and scripts.
 
-Each round is an **independent scribea session** at runtime — the corpus does not (and should not) test whether scribea links sessions to a longitudinal patient record. Continuity lives in the *text*, not in scribea's plumbing.
+## 5. Case manifest (`case.yaml`)
 
----
+The single source of truth for a case. The renderer reads it; the future
+harness reads it. Everything else is derivable.
 
-## 4. Personas
+```yaml
+case_id: 01_cap_septic_shock_vmo
 
-Two personas, deliberately contrasting in vocabulary, pace, and content type. Same clinical scenario routed through both gives the system more surface area than either alone.
+demographics:
+  display_name: Mrs Wilson           # always faux
+  age: 68
+  sex: F
+  icu_day: 2
+  admission_reason: Community-acquired pneumonia, septic shock
 
-| Field             | VMO (consultant)                                              | Registrar / Intensivist                                              |
-|-------------------|---------------------------------------------------------------|----------------------------------------------------------------------|
-| Role              | Senior decision-maker; sets the plan                          | Frontline; gathers data, executes plan, reports back                 |
-| Typical speech    | Higher-level summary, judgement, intent                       | Concrete numbers, observations, actions taken                        |
-| Vocabulary slant  | Assessments (`CONDITION`), plans (`PROCEDURE`), drugs by name | Dosages (`DOSAGE`), values, body parts (`BODY_PART`), specifics      |
-| Pace              | Slower, with pauses; thinks aloud                             | Faster, more numerical, fewer fillers                                |
-| Example utterance | "I'm not happy with the lactate trend — let's escalate."      | "Lactate's come down from 5.8 to 3.9, noradrenaline now 12 mcg/min." |
+previous_notes: |
+  Admitted overnight via ED. CAP with septic shock. Intubated for hypoxic
+  respiratory failure on arrival to ICU. Noradrenaline started at
+  0.05 mcg/kg/min, escalated to 0.15. Cefepime + azithromycin commenced.
+  CXR with bilateral basal consolidation. Blood and tracheal cultures
+  pending. ICU day 2.
 
-The personas are *named* but not real people. Suggested anonymous handles for the corpus: `VMO_A`, `VMO_B`, `REG_A`, `REG_B`. Use 2-3 of each across episodes so voice-randomisation has variety.
+session:
+  role: vmo                          # vmo | registrar
+  dictation_style: systems           # systems | checklist (see §6)
+  clinician: Dr A.Smith              # informational; not used by pipeline
+  audio_render:
+    voice_id: ballad                 # PAI voice server voice id
+    background_pool: icu_ambient     # subdir of test-corpus/backgrounds/
+    snr_db: -18                      # voice this many dB above background
+    seed: cap_septic_shock_vmo       # base seed for "random" bg slicing
+  clips:
+    - audio: clips/01.mp3
+      script: scripts/01.txt
+    - audio: clips/02.mp3
+      script: scripts/02.txt
+    - audio: clips/03.mp3
+      script: scripts/03.txt
+      background_override:           # optional, this clip happens during an alarm
+        asset: icu_alarm_intermittent
+        snr_db: -10                  # alarm closer to voice
+```
 
----
+Schema notes:
 
-## 5. Per-clip authoring rules
+- `case_id` matches the directory name. The renderer asserts this.
+- `demographics`: required keys `display_name`, `age`, `sex`,
+  `admission_reason`. `icu_day` optional. Free to add others, but the
+  pipeline only reads what the structure-worker template references.
+- `previous_notes`: free-text markdown. v0 is static authored content.
+  Post-POC becomes derived from prior sessions in the case (specseed §3.1
+  lens — values computed from event log).
+- `session.role` must map to a template id: `vmo` → `icu_vmo`,
+  `registrar` → `icu_registrar`. The renderer asserts the mapping.
+- `session.dictation_style` documents the intended script shape. The
+  pipeline does not branch on it; it lives here for human readers and
+  future tooling.
+- `session.audio_render.seed` is the corpus-author-chosen base seed. The
+  renderer derives a per-clip seed as `f(seed, clip_index)` so per-clip
+  background slices differ but the whole case is reproducible.
+- `clips[]` is ordered. Position = dictation order, mapped 1:1 to the
+  ingress's `clips.seq` for the session.
+- `background_override` per clip is optional and overrides the
+  session-level `background_pool` / `snr_db` for that one clip.
 
-Each clip MUST satisfy:
+## 6. Roles and dictation styles
 
-- **Duration 5-15 seconds** when rendered. Authoring guide: ~12-35 words for the VMO pace, ~18-45 words for the Registrar pace.
-- **Single speaker** for the whole clip. (Multi-speaker clips break the per-clip transcribe + assemble contract; speaker-change happens between clips.)
-- **At least one clinical entity** drawn from the §1.6 vocabulary in `scribe-ner-redact.md` (MEDICATION, DOSAGE, CONDITION, PROCEDURE, BODY_PART).
-- **At least one PHI element somewhere in the round.** Distribute across clips — don't pile them into clip 1. PHI types per spec §1.6: PERSON, DATE, MRN, ADDRESS, PHONE.
-- **Realistic clinical phrasing** — use the Australian English register the system is targeting; spell out numbers the way clinicians say them ("forty milligrams" not "40 mg" in the spoken script; the transcript will have the digits).
+Two roles for POC: **VMO** and **Registrar**. Role determines template
+(one-to-one mapping per [§11.3](#113-templates-per-role)) and — by v0
+corpus convention — the **Dictation Style** of the script.
 
-Each round MUST satisfy:
+> **The role↔style pinning is a v0 corpus simplification, not a clinical
+> claim.** In real ICU practice clinicians use both styles, often
+> alternating between them within a single shift. The source of truth for
+> the two styles is
+> [`icu-notes-two-approaches.md`](icu-notes-two-approaches.md); read it
+> before authoring scripts. v0 pins one style per role so the corpus
+> produces two recognisably-different structured outputs to test the
+> pipeline against.
 
-- **2 to 5 clips total** — author chooses based on what the narrative needs.
-- **Round contains at least 4 distinct entity types** across its clips (mix clinical + PHI).
-- **At least one new PHI element** not already uttered earlier in the episode — each round introduces something new for the detector to find.
-- **References at least one element from a prior round** when the round is 2, 3, or 4 — this is the continuity property.
+### 6.1 VMO — Systems Approach
 
----
+An organ-system review. The clinician walks the body system-by-system,
+each section assembling that system's current story (status, drivers,
+plan, thresholds that would change the plan). Hierarchical and integrative;
+the plan falls out of the model, not the list.
 
-## 6. Ground truth schema
+Canonical system list (per
+[`icu-notes-two-approaches.md`](icu-notes-two-approaches.md)):
 
-Per round, a JSON sidecar. Hand-authored alongside the dialog (NOT extracted from audio after the fact — that defeats the purpose).
+- **Neuro** — sedation, RASS/GCS, pain, plan to lighten / extubate
+- **CVS** — vasopressors, MAP, lactate, rhythm, trajectory
+- **Resp** — vent mode + settings, FiO₂, PEEP, P/F, secretions, SBT plan
+- **Renal** — UO, creatinine, urea, K⁺, RRT triggers
+- **GI** — feeding, tolerance, bowels, abdomen
+- **Heme-ID** — Hb, antibiotics, cultures, day of antibiotics, source control
+- **Endo** — glucose, VRII, electrolytes
+- **Skin** — pressure areas, wounds, turning regimen
+- **Lines** — CVC / art line / IDC days, review/replace
+- **Plan** — integrative — dominant problem, next 24 h, watch-items
 
-```json
+A VMO script clip is one to three systems in dictation tone:
+
+```
+Neuro — sedated on propofol, RASS minus 2, GCS not assessable.
+Plan to lighten in the morning with a view to SBT.
+
+CVS — noradrenaline weaning, 0.08 mcg/kg/min, down from 0.25 on day 1.
+MAP in the 70s, lactate 1.8, peak was 4.2. Continue weaning, off by
+tomorrow if the trajectory holds.
+
+Resp — AC/VC, FiO₂ 0.4, PEEP 8, P/F ratio 240. Right basal consolidation
+improving on chest X-ray. SBT tomorrow if off pressors.
+```
+
+Multiple clips per session = natural breaks between systems or a pause
+for thought.
+
+### 6.2 Registrar — Checklist Approach (FAST HUGS BID)
+
+A fixed-list safety pass. Each item is independent; the clinician confirms
+or addresses each one for every patient, every shift. The note can be
+complete without the clinician integrating across items — that's the
+checklist's strength (omission protection) and its limit (no causal story).
+
+The v0 canonical checklist is **FAST HUGS BID** (per
+[`icu-notes-two-approaches.md`](icu-notes-two-approaches.md)):
+
+- **F**eeding — NG / oral / TPN; rate; tolerance
+- **A**nalgesia — agent + infusion rate
+- **S**edation — agent + RASS / target
+- **T**hromboprophylaxis — pharmacological / mechanical; held + reason if so
+- **H**ead of bed — angle (typically 30°+)
+- **U**lcer prophylaxis — agent
+- **G**lucose — control method, BSL range
+- **S**BT — done / not today / criteria
+- **B**owels — last opened, aperient charted
+- **I**ndwelling devices — CVC / art line / IDC days, infection signs
+- **D**e-escalation — antibiotics, lines, sedation
+
+A Registrar script clip is one or a few checklist items, in handover tone:
+
+```
+Feeding — NG feeds, 30 mils per hour, tolerating.
+Analgesia — fentanyl infusion at 50 mcg per hour.
+Sedation — propofol, RASS minus 2.
+Thromboprophylaxis — held today, AKI and bleeding risk reviewed.
+
+Head of bed at 30 degrees.
+Ulcer prophylaxis — pantoprazole.
+Glucose — variable-rate insulin, BSLs running 7 to 9.
+
+SBT not today.
+Bowels — not opened, aperient charted.
+Indwelling devices — CVC, art line, IDC, all day 3, no signs of infection.
+De-escalation pending micro.
+```
+
+### 6.3 Why these two together
+
+The two styles produce *recognisably different* assembled transcripts and
+*therefore* different structured outputs:
+
+- The Systems output captures causal reasoning, trajectory, thresholds —
+  the *"why"* and the *"what's next"*.
+- The Checklist output captures coverage and confirmation — the
+  *"have I addressed this?"*.
+
+Each protects against a failure mode the other can hide:
+
+- Systems: fragmentation protection — items aren't treated in isolation.
+- Checklist: omission protection — routine safety items aren't dropped.
+
+For the pipeline, that means the structure-worker (with role-specific
+templates per §11.3) has to produce schemas that genuinely fit each style.
+The corpus's role↔style pinning is what gives us two distinct inputs to
+exercise that.
+
+## 7. EMR Backstory
+
+The Backstory is the minimal context attached to a session. For each
+session, the harness passes a value of this shape into the
+structure-worker:
+
+```
+EMR Backstory
+=============
+Demographics: <display_name>, <age><sex>, ICU day <N>
+Admission reason: <free-text>
+
+Previous notes:
+<free-text block>
+```
+
+In v0 this is **static authored content** drawn directly from `case.yaml`.
+Post-POC the previous-notes block becomes derived from prior completed
+sessions in the same case (specseed §3.1 lens — values computed from the
+event log).
+
+The exact prompt-position the structure-worker uses (system-prompt prefix
+vs. user-prompt prefix) is a structure-worker concern, not a corpus
+concern. The corpus contract is: *produce this Backstory string per
+session*.
+
+## 8. Audio rendering pipeline
+
+Two stages: synthesize the voice, then mix with background ambience.
+
+```
+script.txt
+   │
+   ▼
+POST localhost:8888/synthesize     ← PAI voice server (gpt-4o-mini-tts)
+   │
+   ▼
+voice mp3 (clean speech, no background)
+   │
+   ▼
+mix with a slice of a background asset
+   ├─ asset chosen from the pool by seed (deterministic)
+   ├─ offset into the asset chosen by seed (deterministic)
+   └─ voice level set `snr_db` above the background
+   │
+   ▼
+clips/NN.mp3   ← what whisper sees
+```
+
+### 8.1 Voice synthesis
+
+The PAI voice server is the TTS engine. Endpoint:
+`http://localhost:8888/synthesize` (new — see [§11.1](#111-pai-voice-server-synthesize-endpoint)).
+The server fronts OpenAI's `gpt-4o-mini-tts`; voice character, accent,
+and tone come from the server's `settings.json` config.
+
+The renderer passes only `voice_id` (and the script text). Different
+voice ids give different roles a recognisably different vocal character
+without changing the script.
+
+Default voice mapping (overridable per case via
+`session.audio_render.voice_id`):
+
+| Role        | Voice id  | Note                                       |
+|-------------|-----------|--------------------------------------------|
+| `vmo`       | `ballad`  | British-leaning consultant timbre          |
+| `registrar` | `onyx`    | Different timbre for differentiation       |
+
+### 8.2 Background mixing
+
+The renderer picks a background asset deterministically from the pool,
+then slices a segment of the same length as the voice clip at a
+deterministic offset into the asset:
+
+```python
+def render_clip(clip, session, case, backgrounds_dir, voice_server_url):
+    voice_bytes = httpx.post(
+        f"{voice_server_url}/synthesize",
+        json={
+            "message": clip.script_text,
+            "voice_id": session.audio_render.voice_id,
+        },
+    ).content
+    voice = AudioSegment.from_file(BytesIO(voice_bytes), format="mp3")
+
+    asset_id, snr_db = resolve_background(clip, session)
+    bg = AudioSegment.from_file(backgrounds_dir / f"{asset_id}.mp3")
+
+    seed = derive_seed(session.audio_render.seed, clip.index)
+    rng = Random(seed)
+    if len(bg) > len(voice):
+        offset = rng.randint(0, len(bg) - len(voice))
+    else:
+        offset = 0
+    bg_slice = bg[offset : offset + len(voice)]
+
+    mixed = voice.overlay(bg_slice + snr_db)        # snr_db is negative
+    mixed.export(case.dir / clip.audio_path, format="mp3")
+```
+
+Notes:
+
+- `pydub` is a fine choice; ffmpeg-subprocess is also fine. Either way
+  the renderer uses `pathlib.Path` (per project Python coding standards).
+- `snr_db` is *negative* — `-18` means the background sits 18 dB below
+  the voice in the mix.
+- The seed-derivation function is part of the corpus contract: different
+  implementations of the renderer must produce the same offsets for the
+  same case. Proposed: `hash(case_seed + ":" + str(clip_index))` mod
+  `(len(bg) - len(voice))`. The renderer pins this so it is stable.
+
+### 8.3 Background asset pool (POC)
+
+Local-only, gitignored. The corpus doc names the pool by id. The renderer
+fails clearly with `BackgroundMissing: <id>` if any expected asset is
+absent.
+
+POC pool to source as ~30 s CC-licensed clips and drop in
+`test-corpus/backgrounds/`:
+
+| Asset id                      | Character                                          |
+|-------------------------------|----------------------------------------------------|
+| `icu_ward_quiet.mp3`          | low room tone, occasional distant beep             |
+| `icu_monitors_active.mp3`     | regular monitor beeps, hum, fans                   |
+| `icu_alarm_intermittent.mp3`  | as monitors_active + occasional alarm chime        |
+
+Sourcing: freesound.org under CC0 / CC-BY is fine. One asset per id.
+Attribution lives in `test-corpus/backgrounds/ATTRIBUTION.md` (local; the
+attribution is for local audio that isn't distributed by this repo).
+
+Post-POC upgrade: a `test-corpus/backgrounds.yaml` manifest with
+`{id, source_url, sha256, license, attribution}` per asset, plus a fetch
+script — this makes the corpus reproducible across machines without each
+contributor sourcing their own.
+
+## 9. Repo policy
+
+What lives in git and what doesn't:
+
+| Path                                          | Git? | Reason                                     |
+|-----------------------------------------------|------|--------------------------------------------|
+| `test-corpus/README.md`                       | yes  | pointer to this doc                        |
+| `test-corpus/cases/*/case.yaml`               | yes  | recipe                                     |
+| `test-corpus/cases/*/scripts/*.txt`           | yes  | input value                                |
+| `test-corpus/cases/*/clips/*.mp3`             | no   | derived (script × voice × bg)              |
+| `test-corpus/backgrounds/*.mp3`               | no   | local asset cache                          |
+| `test-corpus/backgrounds/ATTRIBUTION.md`      | no   | local (attributes local audio)             |
+| `test-corpus/.cache/`                         | no   | renderer scratch / intermediates           |
+
+Gitignore additions, to land alongside the first corpus commit:
+
+```
+## Test corpus (recipes in git, audio out)
+test-corpus/**/clips/*.mp3
+test-corpus/backgrounds/*.mp3
+test-corpus/backgrounds/ATTRIBUTION.md
+test-corpus/.cache/
+```
+
+## 10. Renderer tool
+
+A small Python script per the project's Python coding standards (click,
+pathlib, ruff, httpx). Lives at `scripts/corpus-render.py`.
+
+Shell:
+
+```bash
+# Render all clips for one case (idempotent — skips up-to-date clips)
+python scripts/corpus-render.py case 01_cap_septic_shock_vmo
+
+# Render the whole corpus
+python scripts/corpus-render.py all
+
+# Force re-render (skip up-to-date check)
+python scripts/corpus-render.py all --force
+```
+
+Behaviour:
+
+1. Walks `test-corpus/cases/<id>/case.yaml`.
+2. For each clip: if `clips/NN.mp3` exists and is newer than its
+   `script.txt` AND newer than its resolved background asset, skip.
+   Otherwise:
+3. POST script text to `localhost:8888/synthesize`, get the voice mp3.
+4. Load background asset, slice at the seeded offset.
+5. Mix voice + bg slice at `snr_db`.
+6. Write to `clips/NN.mp3`.
+
+Idempotence matters because the corpus is meant to be re-renderable
+freely. Without skip-when-up-to-date, every full render bills OpenAI for
+TTS that hasn't changed.
+
+## 11. Architectural prerequisites
+
+The corpus depends on a few system pieces. These are *not* in scope for
+this doc, but the doc commits to the contracts.
+
+### 11.1 PAI voice server `/synthesize` endpoint
+
+New endpoint on `~/.claude/VoiceServer/server.ts`:
+
+```
+POST /synthesize
+Content-Type: application/json
+Body: { "message": "<text>",
+        "voice_id": "<id>",            # optional
+        "voice_options": { … } }       # optional
+Response: 200 OK
+          Content-Type: audio/mpeg
+          body: mp3 bytes
+```
+
+Same request shape as `/notify`, same internal helpers
+(`resolveVoiceOptions`, `synthesizeSpeech`). The new endpoint returns the
+mp3 bytes instead of playing them via `afplay`. Existing endpoints
+(`/notify`, `/notify/personality`, `/pai`) unchanged.
+
+### 11.2 Case linkage on sessions
+
+Per [`adr/0006-case-as-domain-entity.md`](adr/0006-case-as-domain-entity.md):
+a nullable `case_id` column on `sessions` (a string reference label, no FK)
+and one new event type `scribe.case.context_attached.v1` stamped into the
+events log when the caller attaches EMR context at session-create time.
+
+The corpus loader is the *simulated EMR feed* — it reads `case.yaml`,
+extracts demographics + previous_notes, and POSTs them inline as part of
+the session-create request:
+
+```http
+POST /sessions
 {
-  "episode_id": "ep_001",
-  "round_id": "round_2_registrar_midday",
-  "persona": "REG_A",
-  "clips": [
-    {
-      "seq": 1,
-      "duration_target_s": 11,
-      "transcript_canonical": "Lactate's come down from 5.8 to 3.9. Noradrenaline now 12 mcg per minute. Mr Patel still requires sedation with propofol.",
-      "entities": [
-        {"type": "CONDITION", "text": "Lactate", "start": 0, "end": 7},
-        {"type": "MEDICATION", "text": "Noradrenaline", "start": 41, "end": 54},
-        {"type": "DOSAGE", "text": "12 mcg per minute", "start": 59, "end": 76},
-        {"type": "PERSON", "text": "Mr Patel", "start": 78, "end": 86},
-        {"type": "MEDICATION", "text": "propofol", "start": 117, "end": 125}
-      ],
-      "phi_spans": [
-        {"type": "PERSON", "text": "Mr Patel", "start": 78, "end": 86}
-      ]
-    }
-  ]
+  "template_id":    "icu_vmo",
+  "case_id":        "01_cap_septic_shock_vmo",
+  "demographics":   { "display_name": "Mrs Wilson", "age": 68, "sex": "F",
+                      "icu_day": 2, "admission_reason": "..." },
+  "previous_notes": "Admitted overnight via ED…"
 }
 ```
 
-Conventions:
-- `transcript_canonical` is the *intended* transcript — what the script said. Whisper will produce something close but not identical; scoring tools should align (e.g., word-level diff with edit distance) before comparing entity spans.
-- `entities[]` lists ALL entities (clinical + PHI). The `phi_spans[]` array is a redundant filtered view (only `type` in PHI set per spec §1.6) so a PII detector can be scored without recomputing the filter — and so we have an explicit, easy-to-eyeball record of "what should the redactor mask."
-- Offsets are character offsets into `transcript_canonical`, UTF-8, not token offsets.
-- `confidence` is omitted in ground truth (it's 1.0 by definition — we wrote it).
+Ingress validates the template, generates a session id, persists the
+session (with the `case_id` reference recorded), emits
+`scribe.session.created.v1`, and — when context is provided — emits
+`scribe.case.context_attached.v1` with the demographics and previous notes
+in its `data` payload. That event is the audit-honest snapshot of what the
+LLM will see.
+
+There is no separate "create case" step and no `cases` table in `scribe.db`.
+Case content is corpus-resident (or future-EMR-resident); the event log
+captures the moment of attachment forever.
+
+### 11.3 Templates per role
+
+Two new templates: `templates/icu_vmo/` and `templates/icu_registrar/`.
+Each is a full template directory per specseed §4.3 (`template.json`,
+`system_prompt.md`, `schema.json`, `render.tmpl`, `few_shot/`). The
+structure-worker reads the right template per the session's `template_id`;
+no spec change needed beyond authoring the new template directories.
+
+## 12. Glossary and decisions
+
+- Domain language: [`../CONTEXT.md`](../CONTEXT.md)
+- ADR-0006 (case as domain entity): [`adr/0006-case-as-domain-entity.md`](adr/0006-case-as-domain-entity.md)
+
+## 13. Deferred (not in v0)
+
+Listed so they aren't lost.
+
+- **Goldens.** No expected-output pinning. When templates and prompts
+  stabilise enough that "correct" is judgeable, add an `expected/`
+  directory per case with hybrid comparison (byte-exact on
+  assemble-worker and format-worker output; predicate-based on the
+  structure-worker output).
+- **Multi-session per case.** The domain model supports it (ADR-0006);
+  the corpus shape will then become `sessions[]` not `session`, and the
+  EMR Backstory `previous_notes` becomes derived from prior sessions'
+  completed notes.
+- **Self-recorded clips.** A `provenance: recorded` clip type that
+  bypasses the renderer and uses an mp3 the corpus author drops in.
+- **Manifest-fetch backgrounds.** `backgrounds.yaml` + sha256 + fetch
+  script, making the corpus reproducible across machines without each
+  contributor sourcing their own audio.
+- **Failure-injection cases.** Cases that deliberately exercise
+  gap-clip handling, schema-validation retry, late-clip-410. Land
+  alongside goldens.
+- **Automated harness.** No runner yet. Manual drive-through via the
+  ingress PWA is the current "running the corpus". A pytest-based
+  harness lands with goldens.
 
 ---
 
-## 7. PII insertion rules
-
-PHI must appear in every round and span variety across the episode. Per-episode minima:
-
-| PHI type   | Min per episode | Example                                            |
-|------------|-----------------|----------------------------------------------------|
-| `PERSON`   | 4               | "Mrs Hartley", "Dr Yamamoto", "Mr Patel"          |
-| `DATE`     | 3               | "23rd of May", "this morning", "two weeks ago"    |
-| `MRN`      | 1               | "MRN 4 8 2 1 9 7", "record number 482197"         |
-| `ADDRESS`  | 1               | "12 Smith Street Croydon Park"                    |
-| `PHONE`    | 1               | "0 4 1 2 3 4 5 6 7 8"                             |
-
-Authoring notes:
-- Spoken numbers should follow how clinicians actually say them — usually digit-by-digit for MRNs and phones, natural for ages and dosages.
-- Don't reuse PHI strings across episodes — gives the detector cross-episode coverage and prevents shortcut-learning.
-- Mark every PHI mention in `phi_spans[]` even when the same person is named multiple times in a round. Each utterance is a separate detection event.
-
----
-
-## 8. Intake EMR — the base document
-
-The intake document is fabricated structured data, not speech. JSON, one per episode. Its role: establish the patient ground truth the rounds reference, so PHI consistency is easy to check ("the rounds called the patient Mr Patel — does intake agree?").
-
-Suggested fields:
-
-```json
-{
-  "episode_id": "ep_001",
-  "patient": {
-    "name": "Mr Anwar Patel",
-    "mrn": "482197",
-    "dob": "1962-03-14",
-    "address": "12 Smith Street Croydon Park NSW 2133",
-    "phone": "0412 345 678"
-  },
-  "admission": {
-    "admitted_at": "2026-05-21T18:42:00+10:00",
-    "presenting_complaint": "Septic shock secondary to community-acquired pneumonia",
-    "primary_problems": ["Septic shock", "Type 2 respiratory failure", "Acute kidney injury"]
-  },
-  "baseline": {
-    "weight_kg": 84,
-    "allergies": ["penicillin — rash"],
-    "regular_meds": ["atorvastatin 40 mg nocte", "metformin 1 g BD"],
-    "code_status": "for full active treatment"
-  },
-  "current_supports": {
-    "ventilation": "SIMV-PC, FiO2 0.45, PEEP 8",
-    "circulation": "noradrenaline 8 mcg/min",
-    "renal": "no RRT",
-    "sedation": "propofol 30 mg/hr"
-  }
-}
-```
-
-The intake is not part of the audio test — but it IS the canonical answer key for "is the patient name consistent across rounds?" type scoring questions. A future test that asks "does scribea correctly redact every utterance of the patient's name across all rounds?" reads from `patient.name` here.
-
----
-
-## 9. File / directory layout
-
-**Audio does not live in the repo.** Text and ground-truth JSON do. The split:
-
-### In the repo (`~/Projects/scribea/corpus/`, text + JSON only)
-
-```
-corpus/
-  README.md                                 # how the corpus is organised
-  voices/
-    voice_pool.json                         # TTS voice IDs + persona mapping
-  ep_001/
-    intake.json                             # §8 — base truth
-    round_1_vmo_morning/
-      dialog.md                             # script with bracket annotations
-      ground_truth.json                     # §6 — machine-readable spans
-    round_2_registrar_midday/
-      dialog.md
-      ground_truth.json
-    round_3_vmo_evening/
-      ...
-    round_4_registrar_overnight/
-      ...
-  ep_002/
-    ...
-  ep_003/
-    ...
-```
-
-### Outside the repo (`$SCRIBE_CORPUS_AUDIO_DIR`, default `~/Downloads/hospital-backgrounds/` for backgrounds, `~/scribea-corpus-audio/` for rendered clips — paths user-overridable)
-
-```
-hospital-backgrounds/                       # source ambient loops (§11)
-  CREDITS.md                                # attribution + source URLs + licences
-  fadingembersaudio-heart-monitor-hospital-ambience-430219.mp3
-  freesound_community-hospital-busy-x-ray-room-tone-56441.mp3
-  freesound_community-hospital-food-cart-wheeled-79068.mp3
-  freesound_community-021447_sonido-ambiente-de-la-capilla-de-la-calle-hospital-73601.mp3
-  trabajostiu-salaesperahospital_01-329722.mp3
-
-scribea-corpus-audio/                       # rendered output
-  ep_001/
-    round_1_vmo_morning/
-      clip_1.wav                            # 16 kHz mono, rendered
-      clip_2.wav
-      clip_3.wav
-    ...
-  ep_002/
-    ...
-```
-
-### Why the split
-
-Audio is a **build artifact**: regenerable deterministically from `dialog.md` + `voice_pool.json` + the backgrounds pool, given a fixed TTS. Keeping it out of git means: no LFS, no large diffs, no provenance/licence complications for source backgrounds, and a clean separation between authored content (text, ground truth) and rendered content.
-
-`.gitignore` carries defensive patterns (`corpus/**/*.{mp3,wav,flac,…}`) so a render script that writes into the working tree by mistake still can't stage audio.
-
-If a future build ever needs the rendered clips alongside the text (e.g. CI replay), point `SCRIBE_CORPUS_AUDIO_DIR` at a shared mount or fetch on demand from a sibling artifact repo.
-
----
-
-## 10. Authoring workflow
-
-**Text first, audio second.** The order matters because the ground truth is annotated against the *script*, not against whatever whisper happened to transcribe.
-
-1. **Sketch the episode arc** — admission narrative, four rounds, what changes between them. One paragraph.
-2. **Draft each round's dialog** as plain text, one clip per paragraph. Hit the per-clip and per-round constraints in §5.
-3. **Annotate ground truth** for each clip — entity types + character offsets into the script — into the `ground_truth.json` sidecar. A simple bracketing convention in `dialog.md` keeps the human-readable version aligned, e.g. `"{Lactate|CONDITION}'s come down from {5.8|VALUE} to {3.9|VALUE}."` (the brackets are stripped before TTS rendering and the spans are extracted into JSON).
-4. **Pass through a sanity-check script** that loads `ground_truth.json`, verifies span offsets land on the right substring in `transcript_canonical`, checks PHI minima, and warns on missing entity types.
-5. **Render audio** per §11.
-6. **Listen back** to every clip — confirm intelligibility, no rendering artefacts, voice persona matches the script's persona, duration in 5-15s range.
-
-A small CLI in `scripts/corpus/` should automate steps 4 and 5; v0 can do them by hand.
-
----
-
-## 11. Audio rendering pipeline
-
-```
-dialog.md (with bracket annotations)
-    │
-    ▼ strip annotations
-script.txt (one clip per paragraph)
-    │
-    ▼ TTS (PAI speech model)
-clip_N_raw.wav   (single voice per clip, picked from voices/voice_pool.json
-                  using the round's persona handle)
-    │
-    ▼ ffmpeg mix
-    ├─ background loop from backgrounds/ (random pick, -18 dB to -24 dB)
-    └─ optional: light room reverb + bandpass to simulate microphone path
-    │
-    ▼ ffmpeg normalize
-clip_N.wav       (16 kHz mono s16le, peak around -3 dBFS — matches the
-                  output target of scribe-audio-preprocess §3)
-```
-
-Constraints on the TTS step:
-
-- Same persona handle (`VMO_A`, `REG_B`) MUST get the same voice ID across an episode — within an episode the listener should hear the same person across the rounds where that persona appears. Across episodes, persona handles can map to different voices.
-- Voice pool needs ≥ 2 distinct voices per persona class so cross-episode variety exists (≥ 4 voices total for v0).
-- Pitch / speed jitter (±5%) optional per-clip to add micro-variation without breaking the persona match.
-- Sample rate at render time can be whatever the TTS emits; the ffmpeg normalize step downsamples to 16 kHz mono.
-
-Background mix:
-- Source pool: `$SCRIBE_CORPUS_AUDIO_DIR/hospital-backgrounds/` — default
-  `~/Downloads/hospital-backgrounds/` for v0 (see §9 for the file list and
-  why the pool lives outside the repo). The render script resolves the
-  path once at startup and stamps it into the rendered output's sidecar
-  metadata so replays know which pool produced which clip.
-- Files are stereo 44.1 kHz MP3; the mix step downmixes to mono and
-  resamples to match the speech track before mixing.
-- Random pick per clip; **also pick a random sub-window** of the chosen file
-  matched to the clip's duration (the backgrounds are 60-80 s, clips are
-  5-15 s) so the same file used twice in an episode doesn't sound identical.
-- One background per clip — don't layer multiples in v0.
-- Mix level: -18 to -24 dB relative to peak speech. Speech stays the
-  dominant signal; background contributes acoustic realism, not masking.
-- Optional per-clip jitter: ±2 dB on the background level so consecutive
-  clips in the same round don't sit at an artificially identical ratio.
-
----
-
-## 12. Acceptance criteria for v0
-
-Corpus is "done enough to be useful" when:
-
-- **3 episodes complete** — intake + 4 rounds + all clips + ground truth all present
-- **Every entity type from spec §1.6** appears at least once across the corpus (10 types: 5 clinical, 5 PHI)
-- **Every PHI minimum** from §7 met in every episode (4× PERSON, 3× DATE, 1× each of MRN/ADDRESS/PHONE)
-- **Continuity references**: rounds 2-4 of each episode each contain at least one explicit reference to a prior round's content
-- **`scripts/corpus/validate.py`** (or equivalent) runs clean — span offsets line up, PHI minima met, no orphan files
-- **A replay test** drives all 12 rounds through scribea end-to-end without errors; transcripts ≥ 75% word-level accuracy against `transcript_canonical` (whisper isn't perfect on synthesised speech with noise; 75% is the lower bound where downstream NER scoring still means something)
-
-Out of scope for v0 (file as future work if useful):
-
-- Multi-speaker clips (cross-talk, interruptions)
-- Code-switching, accents beyond the available voice pool
-- Adversarial inputs (deliberate PII near non-PII tokens to trick the detector)
-- Longer rounds (>5 clips)
-- Real-time streaming render
-
----
-
-## 13. What changes when this exists
-
-- **NER plugin** (you): can be scored on per-type precision/recall against ground truth, not eyeballed.
-- **PII detector plugin** (matt): same — every spoken PHI is in the answer key, so false-negative rate is a number.
-- **End-to-end regression**: replay all 12 rounds after any pipeline change; diff structured output against a golden file checked into the corpus dir.
-- **Cross-model bake-offs** (GLiNER vs scispacy vs regex): same input, same ground truth, objective comparison.
-- **Acoustic baselines**: word-error-rate on the corpus becomes the regression metric for any change to `scribe-audio-preprocess` or the whisper container.
-- **A demo deck**: a single rendered episode is enough to show the system end-to-end without needing a live consult.
-
----
-
-*End of corpus spec.*
+*End of scribe-test-corpus.md.*

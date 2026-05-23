@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scribea:icu_registrar/0.1.0",
+  "title": "ICU Registrar Checklist Approach (FAST HUGS BID) note",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "feeding", "analgesia", "sedation", "thromboprophylaxis",
+    "head_of_bed", "ulcer_prophylaxis", "glucose", "sbt",
+    "bowels", "indwelling_devices", "de_escalation"
+  ],
+  "properties": {
+    "feeding":            { "type": "string", "minLength": 1, "description": "Route, rate, tolerance." },
+    "analgesia":          { "type": "string", "minLength": 1, "description": "Agent and infusion rate." },
+    "sedation":           { "type": "string", "minLength": 1, "description": "Agent and RASS/target." },
+    "thromboprophylaxis": { "type": "string", "minLength": 1, "description": "Pharmacological/mechanical; held + reason if applicable." },
+    "head_of_bed":        { "type": "string", "minLength": 1, "description": "Angle (typically 30+ degrees)." },
+    "ulcer_prophylaxis":  { "type": "string", "minLength": 1, "description": "Agent." },
+    "glucose":            { "type": "string", "minLength": 1, "description": "Control method, BSL range." },
+    "sbt":                { "type": "string", "minLength": 1, "description": "Done today / not today / criteria not met." },
+    "bowels":             { "type": "string", "minLength": 1, "description": "Last opened, aperient charted." },
+    "indwelling_devices": { "type": "string", "minLength": 1, "description": "CVC/art line/IDC days, infection signs." },
+    "de_escalation":      { "type": "string", "minLength": 1, "description": "Antibiotics, lines, sedation: step-down opportunities." }
+  }
+}
