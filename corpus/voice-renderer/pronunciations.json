@@ -1,0 +1,15 @@
+{
+  "_comment": "Word-boundary pronunciation overrides applied before TTS. Add medical terms whose default TTS pronunciation is wrong. Source of truth for changes lives here in the repo.",
+  "replacements": [
+    { "term": "MRN",          "phonetic": "M R N",            "note": "spell out — medical record number" },
+    { "term": "ECG",          "phonetic": "E C G",            "note": "spell out — electrocardiogram" },
+    { "term": "ICU",          "phonetic": "I C U",            "note": "spell out — intensive care unit" },
+    { "term": "VMO",          "phonetic": "V M O",            "note": "spell out — visiting medical officer" },
+    { "term": "PEEP",         "phonetic": "peep",             "note": "say as a word" },
+    { "term": "SIMV-PC",      "phonetic": "S I M V P C",      "note": "spell out — pressure-control SIMV" },
+    { "term": "T2DM",         "phonetic": "type two D M",     "note": "type 2 diabetes mellitus" },
+    { "term": "FiO2",         "phonetic": "F I O two",        "note": "fraction of inspired oxygen" },
+    { "term": "RRT",          "phonetic": "R R T",            "note": "renal replacement therapy" },
+    { "term": "SNOMED-CT-AU", "phonetic": "S NO med C T A U", "note": "leave 'SNO-med' as a syllable" }
+  ]
+}

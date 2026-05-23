@@ -1,0 +1,34 @@
+{
+  "_comment": "scribea-local persona → OpenAI voice mapping. Used by ./server.ts when resolving the 'persona' field on POST /synthesize. OpenAI voices (as of 2026-05): alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer. The 'instructions' field is honored only when model='gpt-4o-mini-tts'.",
+  "default": "VMO_A",
+  "voices": {
+    "VMO_A": {
+      "voice_id": "onyx",
+      "speed": 0.95,
+      "model": "gpt-4o-mini-tts",
+      "instructions": "Speak as an experienced senior medical consultant on a clinical ward round — measured pace, thoughtful pauses, decisive tone. Australian English register.",
+      "description": "Senior male VMO; slower, decisive."
+    },
+    "VMO_B": {
+      "voice_id": "sage",
+      "speed": 0.95,
+      "model": "gpt-4o-mini-tts",
+      "instructions": "Speak as a senior medical consultant — calm, summative, makes assessment and plan calls. Australian English register.",
+      "description": "Senior VMO; calm, summative."
+    },
+    "REG_A": {
+      "voice_id": "echo",
+      "speed": 1.05,
+      "model": "gpt-4o-mini-tts",
+      "instructions": "Speak as a busy ICU registrar reporting observations and actions taken — faster pace, numerical, slightly clipped. Australian English register.",
+      "description": "ICU registrar; fast, numerical."
+    },
+    "REG_B": {
+      "voice_id": "nova",
+      "speed": 1.05,
+      "model": "gpt-4o-mini-tts",
+      "instructions": "Speak as an ICU registrar handing over — concrete, observation-led, slightly hurried. Australian English register.",
+      "description": "ICU registrar; concrete, hurried."
+    }
+  }
+}
