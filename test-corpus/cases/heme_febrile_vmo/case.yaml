@@ -1,0 +1,82 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "heme_febrile_vmo",
+    "role": "vmo",
+    "template_id": "icu_vmo",
+    "dictation_style": "systems",
+    "voice_id": "ballad",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Latin American",
+      "age": 87,
+      "age_bracket": "75-89",
+      "body_habitus": "slim",
+      "icu_day": 1,
+      "admission_reason": "febrile neutropenia"
+    },
+    "clinical": {
+      "primary_system": "haematological",
+      "secondary_systems": [
+        "gastrointestinal"
+      ],
+      "trajectory": "deteriorating",
+      "ventilation": "intubated",
+      "vasoactive": "noradrenaline + vasopressin",
+      "renal": "none"
+    },
+    "background": {
+      "comorbidities": [
+        "chronic kidney disease"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "none",
+      "code_status": "For full active treatment"
+    },
+    "rng_seed": 1
+  }
+
+case_id: heme_febrile_vmo
+
+demographics:
+  display_name: "Mr Henderson"
+  age: 87
+  sex: M
+  icu_day: 1
+  admission_reason: "Febrile neutropenia with septic shock"
+
+previous_notes: |
+  87M, day 7 post induction chemotherapy for AML on the haematology ward.
+  Background of stage 3 CKD (baseline creatinine 150), otherwise
+  reasonably preserved baseline function per family. Profoundly
+  neutropenic (neutrophils 0.1). Spiked fevers to 39.5 overnight with
+  rapidly progressive hypotension despite 2L crystalloid resuscitation.
+  Lactate climbed from 2.5 to 7 over four hours. CXR with bilateral
+  infiltrates — pneumonia is the presumed source. Intubated on the ward
+  by MET before transfer for worsening hypoxaemia and obtunded conscious
+  state. Broad-spectrum cefepime and amikacin commenced in ED;
+  vancomycin added on ICU arrival given CVC in situ. Blood cultures from
+  two sites, CVC tip, sputum, and MSU all pending. G-CSF charted. Family
+  aware, for full active treatment at this time.
+
+session:
+  role: vmo
+  dictation_style: systems
+  clinician: "Dr A. Smith"
+  audio_render:
+    voice_id: ballad
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: heme_febrile_vmo
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

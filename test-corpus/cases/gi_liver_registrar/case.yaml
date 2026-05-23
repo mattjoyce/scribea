@@ -1,0 +1,84 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "gi_liver_registrar",
+    "role": "registrar",
+    "template_id": "icu_registrar",
+    "dictation_style": "checklist",
+    "voice_id": "onyx",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "European Australian",
+      "age": 78,
+      "age_bracket": "75-89",
+      "body_habitus": "average",
+      "icu_day": 2,
+      "admission_reason": "acute liver failure"
+    },
+    "clinical": {
+      "primary_system": "gastrointestinal",
+      "secondary_systems": [],
+      "trajectory": "stable",
+      "ventilation": "NIV",
+      "vasoactive": "noradrenaline (weaning)",
+      "renal": "oliguric AKI"
+    },
+    "background": {
+      "comorbidities": [
+        "transplant immunosuppression"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "apixaban",
+      "code_status": "For full active treatment"
+    },
+    "rng_seed": 42
+  }
+
+case_id: gi_liver_registrar
+
+demographics:
+  display_name: "Mr Davies"
+  age: 78
+  sex: M
+  icu_day: 2
+  admission_reason: "Acute liver failure on background of liver transplant"
+
+previous_notes: |
+  78M, post orthotopic liver transplant five years ago for primary
+  sclerosing cholangitis, on long-term tacrolimus. Admitted to ICU
+  yesterday with acute graft dysfunction — presented to ED with
+  jaundice, encephalopathy (West Haven grade 2), and oliguria. ALT 1800,
+  AST 2200, bilirubin 240, INR 1.6 on admission. Renal function
+  deteriorated rapidly from a baseline creatinine of 110 — currently
+  320, urine output marginal, no clear pre-renal trigger. Hepatology
+  reviewed and felt this represents acute cellular rejection versus
+  ischaemic injury; tacrolimus held pending further workup, transplant
+  biopsy planned tomorrow if coagulation permits. Started on NIV
+  overnight for hypoxic respiratory failure thought to be a mix of
+  hepatopulmonary physiology and small bilateral effusions. Required
+  noradrenaline support up to 0.1 mcg/kg/min, currently weaning.
+  Apixaban (prescribed for AF) held on admission. Family aware and
+  involved. For full active treatment at this time pending the biopsy
+  result and transplant team review.
+
+session:
+  role: registrar
+  dictation_style: checklist
+  clinician: "Dr R. Patel"
+  audio_render:
+    voice_id: onyx
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: gi_liver_registrar
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

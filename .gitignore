@@ -60,3 +60,8 @@ ingress/vendor/
 .beads/*.db
 .beads/*.db-wal
 .beads/*.db-shm
+
+## test-corpus audio (the scribe-test-corpus.md v0 design uses this layout)
+test-corpus/**/clips/*.mp3
+test-corpus/backgrounds/*.mp3
+test-corpus/.cache/
