@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -426,6 +428,60 @@ func (s *server) handleListClips(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, clips)
 }
 
+// handleGetClipAudio streams the raw audio blob for a clip. Used by the PWA's
+// open-session view to play back uploaded clips. Range requests are supported
+// via http.ServeContent so <audio> seeking works.
+func (s *server) handleGetClipAudio(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("id")
+	clipID := r.PathValue("clip_id")
+	clip, err := s.getClip(clipID)
+	if err != nil {
+		writeError(w, 500, "db_read", err.Error())
+		return
+	}
+	if clip == nil || clip.SessionID != sessionID {
+		writeError(w, 404, "no_such_clip", clipID)
+		return
+	}
+	sum := strings.TrimPrefix(clip.AudioRef, "sha256:")
+	if sum == "" {
+		writeError(w, 404, "no_audio_ref", clipID)
+		return
+	}
+	path := filepath.Join(s.cfg.blobsDir, sum)
+
+	contentType := "application/octet-stream"
+	var meta map[string]any
+	if len(clip.Meta) > 0 {
+		if err := json.Unmarshal(clip.Meta, &meta); err == nil {
+			if af, ok := meta["audio_format"].(string); ok && af != "" {
+				contentType = af
+			}
+		}
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeError(w, 404, "no_blob", "audio blob missing on disk")
+			return
+		}
+		writeError(w, 500, "blob_open", err.Error())
+		return
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		writeError(w, 500, "blob_stat", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	http.ServeContent(w, r, sum, st.ModTime(), f)
+}
+
 // ----- close / note / baggage -----
 
 type closeReq struct {
@@ -533,6 +589,35 @@ func (s *server) handleGetBaggage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, events)
+}
+
+// handleDeleteSession removes a session and all its derived rows
+// (events, clips). Used for clearing test sessions in dev. Blobs are
+// left in the content-addressed store — they may be shared with other
+// sessions, and a separate GC pass can sweep unreferenced ones.
+func (s *server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sess, err := s.getSession(id)
+	if err != nil {
+		writeError(w, 500, "db_read", err.Error())
+		return
+	}
+	if sess == nil {
+		writeError(w, 404, "no_such_session", id)
+		return
+	}
+	deleted, err := s.deleteSessionCascade(id)
+	if err != nil {
+		writeError(w, 500, "db_delete", err.Error())
+		return
+	}
+	log.Printf("session %s deleted: %d events, %d clips, %d sessions", id,
+		deleted["events"], deleted["clips"], deleted["sessions"])
+	writeJSON(w, 200, map[string]any{
+		"session_id":      id,
+		"deleted":         deleted,
+		"note":            "blobs retained (content-addressed; GC separately)",
+	})
 }
 
 // ----- internal callbacks from workers -----

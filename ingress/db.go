@@ -384,6 +384,50 @@ func (s *server) listEvents(sessionID string) ([]eventRow, error) {
 	return out, rows.Err()
 }
 
+// deleteSessionCascade removes the session row and all rows that
+// reference it (events first to satisfy ordering even though there's no
+// FK on events.session_id; clips next via the explicit FK to sessions).
+// Returns per-table delete counts. Blobs are NOT touched — they are
+// content-addressed and may be shared across sessions; GC them
+// separately if disk pressure matters.
+func (s *server) deleteSessionCascade(sessionID string) (map[string]int64, error) {
+	out := map[string]int64{"events": 0, "clips": 0, "sessions": 0}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	res, err := tx.Exec(`DELETE FROM events WHERE session_id=?`, sessionID)
+	if err != nil {
+		return out, fmt.Errorf("delete events: %w", err)
+	}
+	if n, e := res.RowsAffected(); e == nil {
+		out["events"] = n
+	}
+
+	res, err = tx.Exec(`DELETE FROM clips WHERE session_id=?`, sessionID)
+	if err != nil {
+		return out, fmt.Errorf("delete clips: %w", err)
+	}
+	if n, e := res.RowsAffected(); e == nil {
+		out["clips"] = n
+	}
+
+	res, err = tx.Exec(`DELETE FROM sessions WHERE session_id=?`, sessionID)
+	if err != nil {
+		return out, fmt.Errorf("delete session: %w", err)
+	}
+	if n, e := res.RowsAffected(); e == nil {
+		out["sessions"] = n
+	}
+
+	if err := tx.Commit(); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
 // --- idempotency ---
 
 func (s *server) idempotencyGet(key string) (json.RawMessage, bool, error) {
