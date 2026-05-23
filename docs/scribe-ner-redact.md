@@ -20,6 +20,19 @@ Three rules govern how new values attach. They are the same rules `scribe-audio-
 
 These three rules make every fact retraceable and every plugin replayable without coordination.
 
+> **POC divergence from [`phi-redact.md`](./phi-redact.md) §16.** That spec
+> says "original transcript text must never reach disk." For this POC we
+> deliberately hold the line on rule 2 above: `clips.transcript` keeps the
+> original transcript verbatim, and `clips.redacted_transcript_ref` points
+> at the redacted blob that downstream stages consume. The original is
+> retained for traceability — operators need to *examine* what was
+> removed during the bring-up period, and the additive projection design
+> only works if a SQL reader can compare original vs redacted directly.
+> Before any deployment past POC, revisit this trade-off: lift the
+> original-retention requirement, scrub `clips.transcript` after redact
+> stamps the blob, and stop persisting the transcript inside the
+> `scribe.clip.transcribed.v1` event payload.
+
 ---
 
 ## Plugin 1 — `scribe-clinical-ner`
@@ -160,7 +173,7 @@ Keyed on `event_id`. If `clips.entities` is already non-NULL for this `clip_id`,
 
 ### 2.1 Purpose
 
-Produce a redacted transcript by masking PHI entity spans. In v0, runs in passthrough mode — the redacted blob has the same content as the original. Downstream stages consume the redacted ref by default. When real redaction is needed, only this plugin's logic changes.
+Produce a redacted transcript by masking PHI entity spans. **Default mode is now `active`**: the plugin POSTs the transcript to the deployed PHI detector (`docs/phi-redact.md`, default `http://192.168.20.4:8890/redact`), receives `{model, text, entities}`, writes the redacted text as a new content-addressed blob, and persists the audit list to `clips.redactions`. The original transcript stays in `clips.transcript` per §0 rule 2 (POC trade-off). `passthrough` mode is retained for tests/replays — same shape, no detector call, refs equal.
 
 ### 2.2 Position
 
@@ -229,17 +242,24 @@ Two options for v0:
 
 **Chosen for v0: Option A with materialisation** — `scribe-redact` always writes the original transcript to the blob store at `sha256(transcript)` (idempotent via CAS — same content dedupes to the same path). In passthrough mode, `redacted_transcript_ref == original_transcript_ref` and exactly one blob exists per distinct transcript. `assemble-worker` always reads via the ref. `clips.transcript` remains independently queryable from SQL per §0 rule 2.
 
-### 2.7 NOP / passthrough behaviour
+### 2.7 Active and passthrough behaviour
 
-- Receive `scribe.clip.entities.v1`
-- Read the original transcript from `clips.transcript`
-- Compute `original_ref = sha256(transcript)`
-- Write the transcript to the blob store at `original_ref` (idempotent — skip if blob exists)
-- In passthrough mode: emit with `redacted_transcript_ref = original_ref`, `redactions: []`, `passthrough: true`
-- Update `clips.redacted_transcript_ref` projection (= original_ref in passthrough)
-- Stamp `meta.latency_ms`
+**Active mode (default since 0.2.0):**
 
-In active mode (post-v0): filter entities by `PHI=yes`, apply mask strategy in reverse offset order (to keep earlier offsets valid), write the new text to the blob store, emit with the new ref.
+1. Receive `scribe.clip.entities.v1` (the NER entities are not used by active redact — the detector has its own PHI model; entities just trigger the run).
+2. `ingress_get(/sessions/{session_id})`; find this clip; read `clips.transcript`.
+3. POST `{text, placeholder_format}` to `phi_url` (default `http://192.168.20.4:8890/redact` per `phi-redact.md`).
+4. Map the detector's audit shape `{start, end, label, score, text}` to our `redactions[]` shape (§2.5) — `entity_type = label` (verbatim, per phi-redact.md §142), `replacement_text = placeholder_format.format(label=label)`, `source_entity_index = null` (no NER cross-ref in active mode). Detector confidence flows through as an additive `score` field.
+5. Write the **redacted** text to the blob store at `sha256(redacted)`. CAS dedupes across replays; a different mask strategy or detector model produces a different blob naturally.
+6. Stamp `meta.redact` with `phi_model`, `phi_redacted_at`, `phi_url`, `mode`, `redactions_count`, `placeholder_format`. The audit list goes to `clips.redactions`.
+7. Emit `scribe.clip.redacted.v1` with `passthrough: false`, distinct refs, populated `redactions[]`.
+
+**Passthrough mode** (opt-in via `redact_mode: passthrough`):
+
+- Skips the detector call entirely.
+- Writes the original transcript as a blob; `redacted_transcript_ref == original_transcript_ref`.
+- Emits with `redactions: []`, `passthrough: true`, `redactor.mask_strategy: "none"`.
+- Used by replay tests and during PHI-detector outages.
 
 ### 2.8 Projection: `clips.redacted_transcript_ref` and `clips.redactions`
 
@@ -266,11 +286,13 @@ Keyed on `event_id`. If `clips.redacted_transcript_ref` is already non-NULL, no-
 
 ### 2.11 Environment
 
-| Env var                         | Default        | Notes                                                                          |
-|---------------------------------|----------------|--------------------------------------------------------------------------------|
-| `REDACT_MODE`                   | `passthrough`  | `passthrough` or `active`                                                      |
-| `REDACT_MASK_STRATEGY`          | `placeholder`  | `placeholder` (`[PERSON]`), `type-token` (`[PERSON_1]`), `asterisks` (`****`)  |
-| `REDACT_PHI_TYPES`              | `PERSON,DATE,MRN,ADDRESS,PHONE` | which types to redact when in active mode                                      |
+| Env var                         | Default                                | Notes                                                                  |
+|---------------------------------|----------------------------------------|------------------------------------------------------------------------|
+| `REDACT_MODE`                   | `active`                               | `active` (calls phi-detector) or `passthrough` (no-op for replays)     |
+| `PHI_URL`                       | `http://192.168.20.4:8890/redact`      | Deployed detector endpoint per `docs/phi-redact.md`                    |
+| `REDACT_PLACEHOLDER_FORMAT`     | `[{label}]`                            | Python `str.format` template; `{label}` is the detector's label string |
+| `PHI_REQUEST_TIMEOUT_SECONDS`   | `30`                                   | Per-call HTTP timeout (cold start can be ~30s; steady state sub-second)|
+| `REDACT_PHI_TYPES`              | *(unused in v0.2.0)*                   | Reserved — detector decides what counts as PHI                          |
 
 ---
 
