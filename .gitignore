@@ -41,10 +41,11 @@ Thumbs.db
 *.swp
 *~
 
-## Python (plugin venvs)
+## Python (plugin venvs + script bytecode caches)
 plugins/**/__pycache__/
 plugins/**/.venv/
 plugins/**/*.pyc
+scripts/__pycache__/
 
 ## Go
 ingress/vendor/
