@@ -48,11 +48,23 @@ func (s *server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 // ----- sessions -----
 
 type createSessionReq struct {
-	TemplateID    string         `json:"template_id"`
-	CaseID        string         `json:"case_id,omitempty"`        // ADR-0006: optional reference label
-	Demographics  map[string]any `json:"demographics,omitempty"`   // simulated-EMR context, ADR-0006
-	PreviousNotes string         `json:"previous_notes,omitempty"` // simulated-EMR context, ADR-0006
-	Meta          map[string]any `json:"meta,omitempty"`
+	TemplateID       string                 `json:"template_id"`
+	CaseID           string                 `json:"case_id,omitempty"`            // ADR-0006: optional reference label
+	Demographics     map[string]any         `json:"demographics,omitempty"`       // simulated-EMR context, ADR-0006
+	PreviousNotes    string                 `json:"previous_notes,omitempty"`     // simulated-EMR context, ADR-0006
+	GroundTruthClips []groundTruthClipReq   `json:"ground_truth_clips,omitempty"` // harness mode: per-clip TTS source text
+	Meta             map[string]any         `json:"meta,omitempty"`
+}
+
+// Per-clip ground-truth script supplied by the test harness at session
+// creation. The corpus loader knows what each clip's audio was synthesised
+// from; snapshotting that into the baggage event log lets the PWA Diff tab
+// render truth-vs-ASR alignment without inventing a new endpoint. Follows
+// the same ADR-0006 pattern as demographics/previous_notes: the caller is
+// the authority for case content; scribe.db just records it as an event.
+type groundTruthClipReq struct {
+	Seq    int    `json:"seq"`
+	Script string `json:"script"`
 }
 
 func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +100,11 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	hasContext := len(req.Demographics) > 0 || req.PreviousNotes != ""
 	if hasContext && req.CaseID == "" {
 		writeError(w, 400, "missing_case_id", "demographics/previous_notes require a case_id")
+		return
+	}
+	hasGroundTruth := len(req.GroundTruthClips) > 0
+	if hasGroundTruth && req.CaseID == "" {
+		writeError(w, 400, "missing_case_id", "ground_truth_clips require a case_id")
 		return
 	}
 
@@ -153,6 +170,27 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 			Meta:      ingressMeta("case_context_attached"),
 		}); err != nil {
 			writeError(w, 500, "append_event_ctx", err.Error())
+			return
+		}
+	}
+
+	// Ground-truth scripts: harness-mode snapshot of what each clip's audio
+	// was synthesised from. Consumed only by the PWA Diff tab — not seen by
+	// the structure-worker (the LLM must not be given the answer).
+	if hasGroundTruth {
+		gtData, _ := json.Marshal(map[string]any{
+			"case_id": req.CaseID,
+			"clips":   req.GroundTruthClips,
+		})
+		if err := s.appendEvent(eventRow{
+			EventID:   uuid.NewString(),
+			EventType: "scribe.case.ground_truth_attached.v1",
+			EventTime: now,
+			SessionID: sessionID,
+			Data:      gtData,
+			Meta:      ingressMeta("ground_truth_attached"),
+		}); err != nil {
+			writeError(w, 500, "append_event_gt", err.Error())
 			return
 		}
 	}

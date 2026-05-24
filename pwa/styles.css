@@ -181,3 +181,36 @@ pre.json, pre.markdown {
 
 dialog { border: 1px solid #999; border-radius: 6px; padding: 16px; }
 dialog menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+
+.diff-clip {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.diff-clip-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.diff-clip-head .diff-wer { margin-left: auto; font-variant-numeric: tabular-nums; color: #444; }
+.diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  border-top: 1px solid #eee;
+  padding-top: 6px;
+}
+.diff-cell { padding: 1px 4px; min-height: 1em; overflow-wrap: anywhere; }
+.diff-cell.eq { color: #333; }
+.diff-cell.del.diff-truth { background: #fbe8e8; color: #7a1f1f; text-decoration: line-through; }
+.diff-cell.ins.diff-hyp { background: #e8f6e8; color: #1f5a1f; }
+.diff-cell.sub.diff-truth { background: #fff8db; color: #6a5400; text-decoration: line-through; }
+.diff-cell.sub.diff-hyp { background: #fff8db; color: #6a5400; }
+.diff-cell.del.diff-hyp, .diff-cell.ins.diff-truth { background: #fafafa; }
+.diff-placeholder { color: #ccc; }

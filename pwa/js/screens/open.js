@@ -1,10 +1,12 @@
-// Open session — read-only view + 3 tabs (baggage, structured, markdown).
+// Open session — read-only view + 4 tabs (baggage, structured, markdown, diff).
 
 import { api } from "../api.js";
 import { subscribe } from "../sse.js";
 import { el, clear, shortId, fmtTime, fmtDuration, badge, mdToHtml } from "../util.js";
+import { tokenize, alignWords, werFromOps, renderDiffPair } from "../diff.js";
 
-const TABS = ["baggage", "structured", "markdown"];
+const TABS = ["baggage", "structured", "markdown", "diff"];
+const GROUND_TRUTH_EVENT = "scribe.case.ground_truth_attached.v1";
 
 export async function mountOpen(root, sessionId, initialTab) {
   clear(root);
@@ -110,6 +112,8 @@ export async function mountOpen(root, sessionId, initialTab) {
           tabPanel.append(el("p", { class: "error", text: `Failed to load note: ${err.message}` }));
         }
       }
+    } else if (activeTab === "diff") {
+      await renderDiffTab(tabPanel, sessionId);
     }
   }
   await renderTab();
@@ -129,4 +133,58 @@ export async function mountOpen(root, sessionId, initialTab) {
   return () => {
     if (sseHandle) sseHandle.close();
   };
+}
+
+// Diff tab: per-clip word-level alignment of ground-truth scripts (snapshot
+// in the baggage event log by the harness at session-create time) vs. the
+// ASR transcript. Refetches session + baggage on each render so transcripts
+// stay fresh as the pipeline completes.
+async function renderDiffTab(panel, sessionId) {
+  panel.append(el("p", { class: "muted",
+    text: "Per-clip diff of ground-truth script vs. ASR transcript (harnessed sessions only)." }));
+  let res, events;
+  try {
+    [res, events] = await Promise.all([
+      api.getSession(sessionId),
+      api.getBaggage(sessionId),
+    ]);
+  } catch (err) {
+    panel.append(el("p", { class: "error", text: `Failed to load: ${err.message}` }));
+    return;
+  }
+  const gtEvent = (events || []).find((e) => e.event_type === GROUND_TRUTH_EVENT);
+  if (!gtEvent) {
+    panel.append(el("p", { class: "muted",
+      text: "No ground truth attached — not a harnessed session." }));
+    return;
+  }
+  const gtData = typeof gtEvent.data === "string" ? JSON.parse(gtEvent.data) : gtEvent.data;
+  const truthBySeq = new Map();
+  for (const c of (gtData.clips || [])) truthBySeq.set(c.seq, c.script || "");
+
+  const clips = [...(res.clips || [])].sort((a, b) => a.seq - b.seq);
+  if (clips.length === 0) {
+    panel.append(el("p", { class: "muted", text: "No clips." }));
+    return;
+  }
+
+  for (const c of clips) {
+    const truthText = truthBySeq.get(c.seq) || "";
+    const hypText = c.transcript || "";
+    const truthTokens = tokenize(truthText);
+    const hypTokens = tokenize(hypText);
+    const ops = alignWords(truthTokens, hypTokens);
+    const werRaw = werFromOps(ops, truthTokens.length);
+    const werTxt = Number.isFinite(werRaw) ? `${(werRaw * 100).toFixed(1)}%` : "—";
+
+    const head = el("div", { class: "diff-clip-head" },
+      el("span", { class: "mono", text: `#${c.seq}` }),
+      el("span", { class: "muted", text: `truth ${truthTokens.length} · hyp ${hypTokens.length}` }),
+      el("span", { class: "diff-wer", text: `WER ${werTxt}` }),
+    );
+    const body = truthText
+      ? renderDiffPair(ops)
+      : el("p", { class: "muted", text: "No ground truth for this clip." });
+    panel.append(el("div", { class: "diff-clip" }, head, body));
+  }
 }
