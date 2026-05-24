@@ -1,0 +1,5 @@
+Resp, intubated and ventilated, AC volume control, tidal volume 420, rate 18, FiO2 0.5, PEEP 8. P to F ratio 180, so mild ARDS picture, likely a combination of resuscitation and early septic lung. No focal consolidation on the admission chest X-ray, just bilateral interstitial change. Plan is lung protective, keep him paralysed if he starts dyssynchronous, and recheck gas in two hours.
+
+Renal, background chronic kidney disease stage three, baseline creatinine around 160. Today's creatinine 240, urea 22, potassium 5.1. Urine output 15 mils an hour over the last three hours, so oliguric. No CRRT yet but the trigger will be a potassium above 6, worsening acidosis, or fluid overload limiting the wean. Fluid balance positive 3.5 litres for the day.
+
+Endo, BSL 11, just commenced variable rate insulin, target 6 to 10.

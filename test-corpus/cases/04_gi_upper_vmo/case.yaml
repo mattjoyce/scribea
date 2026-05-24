@@ -1,0 +1,78 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "gi_upper_vmo",
+    "role": "vmo",
+    "template_id": "icu_vmo",
+    "dictation_style": "systems",
+    "voice_id": "ballad",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Southeast Asian",
+      "age": 36,
+      "age_bracket": "30-44",
+      "body_habitus": "obese",
+      "icu_day": 2,
+      "admission_reason": "upper GI haemorrhage"
+    },
+    "clinical": {
+      "primary_system": "gastrointestinal",
+      "secondary_systems": [],
+      "trajectory": "improving",
+      "ventilation": "intubated",
+      "vasoactive": "none",
+      "renal": "on CRRT"
+    },
+    "background": {
+      "comorbidities": [
+        "cirrhosis",
+        "obstructive sleep apnoea"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "none",
+      "code_status": "For full active treatment"
+    },
+    "rng_seed": 4
+  }
+
+case_id: 04_gi_upper_vmo
+
+demographics:
+  display_name: "Mr Tran"
+  age: 36
+  sex: M
+  icu_day: 2
+  admission_reason: "upper GI haemorrhage"
+
+previous_notes: |
+  36M, background Child-Pugh B cirrhosis (alcohol), OSA on home CPAP, BMI 38.
+  Presented to ED with large-volume haematemesis and melaena, Hb 62 on
+  arrival, lactate 5.8, BP 82/45. Activated massive transfusion protocol,
+  4 units PRBC, 2 FFP, 1 platelets. Intubated in ED for airway protection
+  given ongoing haematemesis and reduced GCS. Urgent gastroscopy showed
+  grade III oesophageal varices, banded x4, no active bleeding post-banding.
+  Octreotide and ceftriaxone commenced. Day 1 ICU developed AKI on CKD,
+  oligoanuric, hyperkalaemic 6.4, CVVHDF commenced overnight. Allergies nil
+  documented. For full active treatment. ICU day 2.
+
+session:
+  role: vmo
+  dictation_style: systems
+  clinician: "Dr K.O'Brien"
+  audio_render:
+    voice_id: ballad
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 04_gi_upper_vmo
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

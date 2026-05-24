@@ -1,0 +1,80 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "gi_liver_registrar",
+    "role": "registrar",
+    "template_id": "icu_registrar",
+    "dictation_style": "checklist",
+    "voice_id": "onyx",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "African",
+      "age": 75,
+      "age_bracket": "75-89",
+      "body_habitus": "slim",
+      "icu_day": 14,
+      "admission_reason": "acute liver failure"
+    },
+    "clinical": {
+      "primary_system": "gastrointestinal",
+      "secondary_systems": [
+        "rheumatological"
+      ],
+      "trajectory": "stable",
+      "ventilation": "intubated",
+      "vasoactive": "noradrenaline (weaning)",
+      "renal": "oliguric AKI"
+    },
+    "background": {
+      "comorbidities": [
+        "dyslipidaemia",
+        "dementia"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "none",
+      "code_status": "For full ICU treatment, not for CPR"
+    },
+    "rng_seed": 6
+  }
+
+case_id: 06_gi_liver_registrar
+
+demographics:
+  display_name: "Mr Okafor"
+  age: 75
+  sex: M
+  icu_day: 14
+  admission_reason: "acute liver failure"
+
+previous_notes: |
+  75M, background dyslipidaemia and moderate dementia, baseline ADLs assisted
+  at residential aged care. Presented with jaundice, confusion and coagulopathy
+  on a background of two weeks of NSAID use for a flare of seronegative
+  inflammatory arthropathy. Admitted as acute liver failure, likely drug
+  induced. INR peaked at 4.8, ammonia 140, grade three encephalopathy.
+  Intubated day 2 for airway protection. Noradrenaline started day 3, peaked
+  0.4 mcg/kg/min, now weaning at 0.05. Oliguric AKI from day 4, managed
+  conservatively, no CRRT. Allergies none documented. For full ICU treatment,
+  not for CPR. Family meeting day 10 reaffirmed ceiling. ICU day 14.
+
+session:
+  role: registrar
+  dictation_style: checklist
+  clinician: "Dr K.O'Brien"
+  audio_render:
+    voice_id: onyx
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 06_gi_liver_registrar
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

@@ -1,0 +1,82 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "cvs_cardiac_vmo",
+    "role": "vmo",
+    "template_id": "icu_vmo",
+    "dictation_style": "systems",
+    "voice_id": "ballad",
+    "demographics": {
+      "sex": "F",
+      "ethnicity": "Pacific Islander",
+      "age": 88,
+      "age_bracket": "75-89",
+      "body_habitus": "frail elderly",
+      "icu_day": 10,
+      "admission_reason": "post-cardiac-arrest syndrome"
+    },
+    "clinical": {
+      "primary_system": "cardiovascular",
+      "secondary_systems": [
+        "psychiatric",
+        "genitourinary"
+      ],
+      "trajectory": "improving",
+      "ventilation": "intubated",
+      "vasoactive": "none",
+      "renal": "oliguric AKI"
+    },
+    "background": {
+      "comorbidities": [
+        "COPD"
+      ],
+      "allergies": "NSAIDs",
+      "anticoagulation": "apixaban",
+      "code_status": "For full active treatment"
+    },
+    "rng_seed": 5
+  }
+
+case_id: 05_cvs_cardiac_vmo
+
+demographics:
+  display_name: "Mrs Tupou"
+  age: 88
+  sex: F
+  icu_day: 10
+  admission_reason: "post-cardiac-arrest syndrome"
+
+previous_notes: |
+  88F, frail elderly, background COPD on home tiotropium, chronic AF on
+  apixaban (last dose morning of arrest). Witnessed out-of-hospital VF
+  arrest at home, bystander CPR, two shocks by paramedics, ROSC at
+  approximately 14 minutes downtime. Intubated in the field. Coronary
+  angiogram day 1 showed moderate non-obstructive disease, no
+  intervention. TTM 36 degrees for 24 hours, rewarmed day 2. Noradrenaline
+  weaned off day 4. Oliguric AKI from day 3, peak creatinine 220, managed
+  conservatively, no CRRT. Slow neuro recovery; awake but disoriented and
+  intermittently agitated since sedation lightened day 7, low-dose
+  quetiapine commenced day 8. IDC in situ, low urine output ongoing.
+  Allergies NSAIDs. For full active treatment. ICU day 10.
+
+session:
+  role: vmo
+  dictation_style: systems
+  clinician: "Dr M.Patel"
+  audio_render:
+    voice_id: ballad
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 05_cvs_cardiac_vmo
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

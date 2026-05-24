@@ -1,0 +1,79 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "cvs_stemi_registrar",
+    "role": "registrar",
+    "template_id": "icu_registrar",
+    "dictation_style": "checklist",
+    "voice_id": "onyx",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Pacific Islander",
+      "age": 92,
+      "age_bracket": "90-99",
+      "body_habitus": "average",
+      "icu_day": 3,
+      "admission_reason": "STEMI"
+    },
+    "clinical": {
+      "primary_system": "cardiovascular",
+      "secondary_systems": [],
+      "trajectory": "stable",
+      "ventilation": "room air",
+      "vasoactive": "noradrenaline (low dose)",
+      "renal": "none"
+    },
+    "background": {
+      "comorbidities": [
+        "cirrhosis",
+        "dementia"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "warfarin",
+      "code_status": "For full ICU treatment, not for CPR"
+    },
+    "rng_seed": 8
+  }
+
+case_id: 08_cvs_stemi_registrar
+
+demographics:
+  display_name: "Mr Te Aho"
+  age: 92
+  sex: M
+  icu_day: 3
+  admission_reason: "STEMI"
+
+previous_notes: |
+  92M, background Child-Pugh B cirrhosis and moderate dementia, baseline
+  mobile with frame at home with daughter. Long-term warfarin for AF.
+  Presented to ED with central chest pain, ECG showed inferior STEMI, troponin
+  370 then 4200. INR on arrival 2.6, so PCI deferred and managed medically with
+  aspirin and a heparin infusion. Peak Killip 2 with mild pulmonary oedema,
+  diuresed with frusemide. Brief run of complete heart block on day 1, settled
+  spontaneously, no pacing required. Noradrenaline started day 1 at 0.05
+  mcg/kg/min, still running low dose. Extubated in ED, on room air since
+  admission. Allergies none documented. For full ICU treatment, not for CPR.
+  ICU day 3.
+
+session:
+  role: registrar
+  dictation_style: checklist
+  clinician: "Dr J.Nguyen"
+  audio_render:
+    voice_id: onyx
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 08_cvs_stemi_registrar
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

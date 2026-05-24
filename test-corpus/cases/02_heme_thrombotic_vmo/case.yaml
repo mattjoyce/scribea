@@ -1,0 +1,81 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "heme_thrombotic_vmo",
+    "role": "vmo",
+    "template_id": "icu_vmo",
+    "dictation_style": "systems",
+    "voice_id": "ballad",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Aboriginal or Torres Strait Islander",
+      "age": 43,
+      "age_bracket": "30-44",
+      "body_habitus": "average",
+      "icu_day": 7,
+      "admission_reason": "thrombotic thrombocytopenic purpura"
+    },
+    "clinical": {
+      "primary_system": "haematological",
+      "secondary_systems": [
+        "psychiatric"
+      ],
+      "trajectory": "deteriorating",
+      "ventilation": "intubated",
+      "vasoactive": "noradrenaline (low dose)",
+      "renal": "on CRRT"
+    },
+    "background": {
+      "comorbidities": [
+        "hypertension"
+      ],
+      "allergies": "IV contrast",
+      "anticoagulation": "none",
+      "code_status": "Not for invasive ventilation, ICU-ceiling-of-care"
+    },
+    "rng_seed": 2
+  }
+
+case_id: 02_heme_thrombotic_vmo
+
+demographics:
+  display_name: "Mr Kunoth"
+  age: 43
+  sex: M
+  icu_day: 7
+  admission_reason: "thrombotic thrombocytopenic purpura"
+
+previous_notes: |
+  43M, background HTN on perindopril, presented to ED day 0 with confusion,
+  petechial rash and dark urine after a week of fatigue. Plt 9, Hb 68, LDH
+  3400, schistocytes on film, creatinine 240. ADAMTS13 sent, presumptive TTP.
+  Started on plasma exchange and pulsed methylprednisolone day 0; caplacizumab
+  added day 2. Intubated day 3 for declining GCS and seizure activity.
+  Anuric AKI from day 4, commenced CVVHDF, ongoing. Noradrenaline restarted
+  yesterday at 0.05 mcg/kg/min for sepsis-physiology after line change.
+  Plt nadir 6 day 5, now 22, refractory pattern. Family meeting day 6:
+  ceiling clarified as ICU-ceiling-of-care, not for re-intubation if extubated,
+  not for CPR. Allergy IV contrast (anaphylaxis). ICU day 7, trajectory
+  deteriorating.
+
+session:
+  role: vmo
+  dictation_style: systems
+  clinician: "Dr K.O'Brien"
+  audio_render:
+    voice_id: ballad
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 02_heme_thrombotic_vmo
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

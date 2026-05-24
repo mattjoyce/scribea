@@ -1,0 +1,78 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "heme_febrile_vmo",
+    "role": "vmo",
+    "template_id": "icu_vmo",
+    "dictation_style": "systems",
+    "voice_id": "ballad",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Latin American",
+      "age": 87,
+      "age_bracket": "75-89",
+      "body_habitus": "slim",
+      "icu_day": 1,
+      "admission_reason": "febrile neutropenia"
+    },
+    "clinical": {
+      "primary_system": "haematological",
+      "secondary_systems": [
+        "gastrointestinal"
+      ],
+      "trajectory": "deteriorating",
+      "ventilation": "intubated",
+      "vasoactive": "noradrenaline + vasopressin",
+      "renal": "none"
+    },
+    "background": {
+      "comorbidities": [
+        "chronic kidney disease"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "none",
+      "code_status": "For full active treatment"
+    },
+    "rng_seed": 1
+  }
+
+case_id: 01_heme_febrile_vmo
+
+demographics:
+  display_name: "Mr Hernandez"
+  age: 87
+  sex: M
+  icu_day: 1
+  admission_reason: "febrile neutropenia"
+
+previous_notes: |
+  87M, background CKD stage 3, on follow-up haematology for low-grade NHL,
+  last chemo cycle nine days ago. Presented to ED with fevers, rigors and
+  lethargy. Neutrophils 0.2, lactate 4.1, BP 78/40 unresponsive to 2L
+  crystalloid. Cefepime and vancomycin started in ED; cultures drawn.
+  Transferred to ICU, intubated for airway protection and worsening
+  haemodynamics. Noradrenaline up to 0.35 mcg/kg/min, vasopressin 0.03 U/min
+  added two hours ago. Allergies none documented. For full active treatment.
+  ICU day 1.
+
+session:
+  role: vmo
+  dictation_style: systems
+  clinician: "Dr R.Lopez"
+  audio_render:
+    voice_id: ballad
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 01_heme_febrile_vmo
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

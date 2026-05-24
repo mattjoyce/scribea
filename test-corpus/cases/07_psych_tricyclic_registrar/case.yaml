@@ -1,0 +1,81 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "psych_tricyclic_registrar",
+    "role": "registrar",
+    "template_id": "icu_registrar",
+    "dictation_style": "checklist",
+    "voice_id": "onyx",
+    "demographics": {
+      "sex": "F",
+      "ethnicity": "East Asian",
+      "age": 60,
+      "age_bracket": "60-74",
+      "body_habitus": "slim",
+      "icu_day": 1,
+      "admission_reason": "tricyclic antidepressant overdose"
+    },
+    "clinical": {
+      "primary_system": "psychiatric",
+      "secondary_systems": [
+        "genitourinary"
+      ],
+      "trajectory": "improving",
+      "ventilation": "intubated",
+      "vasoactive": "noradrenaline + vasopressin",
+      "renal": "none"
+    },
+    "background": {
+      "comorbidities": [
+        "hypertension"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "none",
+      "code_status": "Ward-based ceiling, no escalation"
+    },
+    "rng_seed": 7
+  }
+
+case_id: 07_psych_tricyclic_registrar
+
+demographics:
+  display_name: "Mrs Hwang"
+  age: 60
+  sex: F
+  icu_day: 1
+  admission_reason: "tricyclic antidepressant overdose"
+
+previous_notes: |
+  60F, background HTN on amlodipine, long-standing depression on amitriptyline.
+  Brought in by ambulance after partner found her obtunded with empty blister
+  packs; estimated ingestion 2.5 g amitriptyline approximately 6 hours prior.
+  In ED: GCS 6, QRS 160 ms with right axis deviation, BP 78/40, two seizures
+  terminated with midazolam. Intubated for airway protection. Sodium bicarb
+  boluses given, infusion running, QRS narrowed to 110. Activated charcoal
+  via NG. Noradrenaline 0.2 mcg/kg/min and vasopressin 0.03 U/min commenced
+  for refractory hypotension. Bladder scan on admission 700 mL, IDC inserted
+  with large residual. Psych liaison aware, will review post-extubation.
+  Allergies nil documented. Ward-based ceiling, no escalation if deteriorates
+  beyond current supports. ICU day 1, trajectory improving.
+
+session:
+  role: registrar
+  dictation_style: checklist
+  clinician: "Dr M.Patel"
+  audio_render:
+    voice_id: onyx
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 07_psych_tricyclic_registrar
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

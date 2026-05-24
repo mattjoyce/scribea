@@ -1,0 +1,81 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "cvs_cardiogenic_registrar",
+    "role": "registrar",
+    "template_id": "icu_registrar",
+    "dictation_style": "checklist",
+    "voice_id": "onyx",
+    "demographics": {
+      "sex": "F",
+      "ethnicity": "Latin American",
+      "age": 62,
+      "age_bracket": "60-74",
+      "body_habitus": "average",
+      "icu_day": 1,
+      "admission_reason": "cardiogenic shock"
+    },
+    "clinical": {
+      "primary_system": "cardiovascular",
+      "secondary_systems": [
+        "haematological"
+      ],
+      "trajectory": "deteriorating",
+      "ventilation": "room air",
+      "vasoactive": "noradrenaline (low dose)",
+      "renal": "none"
+    },
+    "background": {
+      "comorbidities": [],
+      "allergies": "none documented",
+      "anticoagulation": "rivaroxaban",
+      "code_status": "Ward-based ceiling, no escalation"
+    },
+    "rng_seed": 9
+  }
+
+case_id: 09_cvs_cardiogenic_registrar
+
+demographics:
+  display_name: "Mrs Reyes"
+  age: 62
+  sex: F
+  icu_day: 1
+  admission_reason: "cardiogenic shock"
+
+previous_notes: |
+  62F, no significant past medical history apart from AF on rivaroxaban,
+  last dose yesterday morning. Presented to ED with acute breathlessness
+  and chest tightness over six hours. Found to be in cardiogenic shock,
+  BP 84/52, lactate 4.2, cool peripheries, bibasal crackles. Bedside echo
+  showed severely impaired LV with EF estimated 20 percent, no obvious
+  regional wall motion abnormality, mild MR. Troponin 1800, ECG showed AF
+  with rate 130s, no acute ischaemic changes. Cardiology reviewed, query
+  acute decompensated cardiomyopathy versus tachycardia-mediated, not for
+  cath lab. Admitted to ICU for inotrope support and monitoring.
+  Noradrenaline started at 0.05 mcg/kg/min, frusemide bolus given.
+  Allergies nil documented. Code status discussed with family and patient
+  this evening: ward-based ceiling of care, not for intubation, CPR or
+  RRT. ICU day 1.
+
+session:
+  role: registrar
+  dictation_style: checklist
+  clinician: "Dr M.Patel"
+  audio_render:
+    voice_id: onyx
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 09_cvs_cardiogenic_registrar
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

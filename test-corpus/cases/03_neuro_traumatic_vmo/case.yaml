@@ -1,0 +1,79 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "neuro_traumatic_vmo",
+    "role": "vmo",
+    "template_id": "icu_vmo",
+    "dictation_style": "systems",
+    "voice_id": "ballad",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Latin American",
+      "age": 65,
+      "age_bracket": "60-74",
+      "body_habitus": "frail elderly",
+      "icu_day": 5,
+      "admission_reason": "severe traumatic brain injury"
+    },
+    "clinical": {
+      "primary_system": "nervous",
+      "secondary_systems": [
+        "haematological"
+      ],
+      "trajectory": "stable",
+      "ventilation": "intubated",
+      "vasoactive": "noradrenaline + vasopressin",
+      "renal": "none"
+    },
+    "background": {
+      "comorbidities": [
+        "obstructive sleep apnoea"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "none",
+      "code_status": "For full ICU treatment, not for CPR"
+    },
+    "rng_seed": 3
+  }
+
+case_id: 03_neuro_traumatic_vmo
+
+demographics:
+  display_name: "Mr Rivera"
+  age: 65
+  sex: M
+  icu_day: 5
+  admission_reason: "severe traumatic brain injury"
+
+previous_notes: |
+  65M, frail, background OSA on home CPAP, no anticoagulation. Unwitnessed
+  fall down a flight of stairs five days ago, found by family with reduced
+  conscious state. GCS 6 in ED (E1 V1 M4), intubated for airway protection.
+  CT brain showed right frontotemporal contusions, small acute SDH along the
+  right convexity, no midline shift. C-spine cleared on CT. ICP bolt inserted
+  day 1, ICPs running 14 to 20 with osmotherapy. Noradrenaline started day 2
+  for CPP targets, vasopressin added day 3 as a noradrenaline-sparing agent.
+  Repeat CT day 3 stable, no new bleed. Allergies none documented. For full
+  ICU treatment, not for CPR. ICU day 5.
+
+session:
+  role: vmo
+  dictation_style: systems
+  clinician: "Dr M.Patel"
+  audio_render:
+    voice_id: ballad
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 03_neuro_traumatic_vmo
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+

@@ -1,0 +1,86 @@
+# Auto-generated stub by scripts/corpus-case-seed.py
+# TODO: fill in display_name, previous_notes, clinician, scripts/NN.txt
+
+# _seed records the rolled fields so the case is reproducible and the
+# author has the full clinical scenario as context when writing scripts.
+_seed: |
+  {
+    "case_slug": "neuro_autoimmune_registrar",
+    "role": "registrar",
+    "template_id": "icu_registrar",
+    "dictation_style": "checklist",
+    "voice_id": "onyx",
+    "demographics": {
+      "sex": "M",
+      "ethnicity": "Middle Eastern",
+      "age": 60,
+      "age_bracket": "60-74",
+      "body_habitus": "average",
+      "icu_day": 2,
+      "admission_reason": "autoimmune encephalitis"
+    },
+    "clinical": {
+      "primary_system": "nervous",
+      "secondary_systems": [
+        "gastrointestinal"
+      ],
+      "trajectory": "deteriorating",
+      "ventilation": "room air",
+      "vasoactive": "none",
+      "renal": "on CRRT"
+    },
+    "background": {
+      "comorbidities": [
+        "atrial fibrillation on DOAC",
+        "dementia"
+      ],
+      "allergies": "none documented",
+      "anticoagulation": "aspirin",
+      "code_status": "For full active treatment"
+    },
+    "rng_seed": 10
+  }
+
+case_id: 10_neuro_autoimmune_registrar
+
+demographics:
+  display_name: "Mr Haddad"
+  age: 60
+  sex: M
+  icu_day: 2
+  admission_reason: "autoimmune encephalitis"
+
+previous_notes: |
+  60M, background early-onset dementia and chronic AF previously on
+  apixaban, switched to aspirin three months ago after a minor GI bleed.
+  Two-week history of subacute confusion, behavioural change and
+  intermittent focal seizures, presented to ED via family after a
+  generalised tonic-clonic event. MRI showed bilateral mesial temporal
+  T2 hyperintensities consistent with autoimmune limbic encephalitis;
+  autoimmune encephalitis panel sent, awaiting. CSF lymphocytic
+  pleocytosis, mildly elevated protein, HSV PCR negative. Empiric
+  aciclovir continued pending PCR, methylprednisolone 1 g IV pulse
+  commenced day 1. Admitted to ICU for fluctuating GCS and seizure
+  monitoring. Anuric AKI on admission, presumed pre-renal plus
+  rhabdomyolysis from prolonged seizure, CK 18000 on arrival. CRRT
+  commenced overnight via right IJ vascath. Levetiracetam loaded.
+  Currently on room air, no vasopressors. Allergies none documented.
+  For full active treatment. ICU day 2.
+
+session:
+  role: registrar
+  dictation_style: checklist
+  clinician: "Dr K.O'Brien"
+  audio_render:
+    voice_id: onyx
+    background_pool: icu_ambient
+    snr_db: -18
+    seed: 10_neuro_autoimmune_registrar
+  clips:
+    - audio:  clips/01.mp3
+      script: scripts/01.txt
+    - audio:  clips/02.mp3
+      script: scripts/02.txt
+    - audio:  clips/03.mp3
+      script: scripts/03.txt
+
